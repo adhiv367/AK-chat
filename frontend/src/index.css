@@ -1,0 +1,127 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--c-pageBg);
+  color: var(--c-text);
+  letter-spacing: -0.005em;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  margin: 0;
+}
+
+input, button, textarea, select {
+  font-family: inherit;
+}
+
+:root {
+  /* Page + cards */
+  --c-pageBg: #0A0E14;
+  --c-cardBg: #12161F;
+  --c-surface: #12161F;
+  --c-surfaceAlt: #0D1119;
+  --c-hover: rgba(13,148,136,0.10);
+
+  /* Row/list interaction states (dark-theme safe) */
+  --c-rowHover: rgba(255,255,255,0.06);
+  --c-rowSelected: rgba(13,148,136,0.16);
+  --c-rowSelectedHover: rgba(13,148,136,0.24);
+
+  /* Neutral tint (replaces leftover light-mode #f9fafb/#fafaf9/#f0f2f5/#ffffff) */
+  --c-tintNeutral: rgba(255,255,255,0.045);
+  --c-tintNeutralHover: rgba(255,255,255,0.08);
+
+  /* Status tints - replace all light-mode alert/badge backgrounds */
+  --c-tintInfo: rgba(129,140,248,0.14);
+  --c-tintInfoText: #C7CCFA;
+
+  --c-tintWarn: rgba(251,191,36,0.14);
+  --c-tintWarnText: #FBBF24;
+
+  --c-tintDanger: rgba(248,113,113,0.14);
+  --c-tintDangerText: #F87171;
+
+  --c-tintSuccess: rgba(52,211,153,0.14);
+  --c-tintSuccessText: #34D399;
+
+  /* Sidebar — obsidian, not solid violet anymore */
+  --c-sidebarBg: #0D1119;
+  --c-sidebarBorder: rgba(255,255,255,.09);
+  --c-navBg: #0D1119;
+  --c-navBgAlt: #161B26;
+  --c-navText: #F4F6F9;
+  --c-navMuted: #C3CBD9;
+  --c-navGroupLabel: #8B94A6;
+  --c-navBorder: rgba(255,255,255,.09);
+  --c-navHover: rgba(255,255,255,.09);
+  --c-navActiveBg: rgba(13,148,136,.22);
+  --c-navActiveText: #ffffff;
+  --c-navActiveBar: #2DD4BF;
+
+  /* Header */
+  --c-headerBg: #0D1119;
+  --c-headerText: #F4F6F9;
+  --c-headerMuted: #A2ABBC;
+  --c-headerBorder: rgba(255,255,255,.09);
+  --c-headerSurface: #161B26;
+
+  /* Borders + text */
+  --c-border: rgba(255,255,255,.1);
+  --c-borderDark: rgba(255,255,255,.06);
+  --c-text: #F4F6F9;
+  --c-textSecondary: #C3CBD9;
+  --c-textMuted: #98A2B5;
+
+  /* Brand — deep teal primary + soft indigo secondary (used across other pages) */
+  --c-primary: #0D9488;
+  --c-primaryHover: #0F766E;
+  --c-primaryLight: rgba(13,148,136,0.16);
+  --c-primaryText: #ffffff;
+  --c-purple: #818CF8;
+  --c-green: #34D399;
+  --c-amber: #FBBF24;
+
+  --c-shadowSm: 0 1px 2px rgba(0,0,0,.4);
+  --c-shadowMd: 0 10px 28px rgba(0,0,0,.5);
+  --c-shadowLg: 0 24px 64px rgba(0,0,0,.6);
+
+  --c-radiusSm: 10px;
+  --c-radiusMd: 14px;
+  --c-radiusLg: 20px;
+
+  /* WhatsApp-style chat surfaces, dark mode */
+  --c-waBg: #0B0F16;
+  --c-incomingBg: #161B26;
+  --c-incomingText: #EEF1F6;
+  --c-outgoingBg: #103832;
+  --c-outgoingText: #D8FBF3;
+  --c-chatBg: #0A0E14;
+  --c-statusDelivered: #818CF8;
+  --c-statusRead: #2DD4BF;
+  --c-statusSent: #5C6675;
+  --c-chatPanel: #0D1119;
+  --c-chatWall: #0A0E14;
+}
+
+input, textarea, select { color: var(--c-text); }
+::placeholder { color: var(--c-textMuted); opacity: 1; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(45,212,191,0.4); }
+

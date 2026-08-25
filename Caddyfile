@@ -1,0 +1,8 @@
+# Caddy reverse proxy with automatic HTTPS (Let's Encrypt).
+# Terminates TLS for the subdomain and forwards everything to the frontend
+# container (nginx), which serves the SPA and proxies /api, /uploads, /l/ to the
+# backend. Requires: DNS A record for the domain -> droplet IP, ports 80+443 open.
+# Replace with your own domain (and point its DNS A record at this host).
+akchat.example.com {
+    reverse_proxy akchat-frontend:80
+}
