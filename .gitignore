@@ -80,3 +80,10 @@ AKCHAT_LLD.html
 *.dump
 *.sql.gz
 *.backup
+
+# Backup/scratch files
+*.zip
+backendlog.txt
+campaigns_current.txt
+email_current.txt
+inspect.txt
