@@ -416,7 +416,7 @@ if (product) {
                   console.log(`[AI] Skipped -- agent replied after ${record.contact_number}'s message`);
                 } else {
                   // ── Build payload for ai_bridge ────────────────────────
-                  const aiPayload = {};
+                  const aiPayload = { customer_id: record.contact_number, wa_number: record.wa_number };
                   if (msgType === 'image') {
                     aiPayload.message = record.message_body || '';
                     aiPayload.image   = record.media_url   || null;
@@ -429,7 +429,7 @@ if (product) {
                   }
 
                   if (aiPayload.message || aiPayload.image) {
-                    const aiResponse = await fetch('https://invi-ai.onrender.com/ai', {
+                    const aiResponse = await fetch('https://akchat-whatsapp-bot.onrender.com/ai', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(aiPayload)
@@ -574,6 +574,48 @@ router.get('/webhook/whatsapp', async (req, res) => {
   res.status(403).json({ error: 'Verification failed' });
 });
 
-module.exports = { router };
 
+/**
+ * PHASE 3: internal endpoint called by the Python AI bridge when a new
+ * product matches a customer's tracked interest. Creates a DRAFT broadcast
+ * for manual review — NEVER sends automatically. Reuses the same
+ * coexistence.broadcasts table and template-sending pipeline as the real
+ * Broadcast Studio, so review/approval/sending all happen through the
+ * existing UI. No auth — internal use only.
+ */
+router.post('/internal/prepare-followup', async (req, res) => {
+  try {
+    const { customer_number, template_id, name, variable_mapping } = req.body;
+    if (!customer_number || !template_id || !variable_mapping) {
+      return res.status(400).json({ error: 'customer_number, template_id, and variable_mapping are required' });
+    }
+
+    const { getSingleAccount } = require('./whatsappAccounts');
+    const account = await getSingleAccount();
+    if (!account) {
+      return res.status(500).json({ error: 'No WhatsApp Business account registered' });
+    }
+
+    const { rows } = await pool.query(
+        `INSERT INTO coexistence.broadcasts
+         (from_number, recipient_numbers, template_id, status, name, variable_mapping, message_type)
+       VALUES ($1, $2, $3, 'DRAFT', $4, $5, 'template')
+       RETURNING id`,
+      [
+        account.displayPhoneNumber,
+        JSON.stringify([{ contact_number: customer_number, name: '' }]),
+        template_id,
+        name || `Interest follow-up — ${customer_number}`,
+        JSON.stringify(variable_mapping),
+      ]
+    );
+
+    console.log(`[PHASE3] Draft broadcast ${rows[0].id} created for ${customer_number}, awaiting review`);
+    res.status(200).json({ status: 'draft_created', broadcastId: rows[0].id });
+  } catch (err) {
+    console.error('[prepare-followup] Error:', err.message);
+    res.status(500).json({ error: 'Failed to create draft broadcast' });
+  }
+});
+module.exports = { router };
 
