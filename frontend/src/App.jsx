@@ -16,6 +16,7 @@ import AdminSettingsPage from './pages/AdminSettingsPage.jsx';
 import MediaLibraryPage from './pages/MediaLibraryPage.jsx';
 import PipelinesPage from './pages/PipelinesPage.jsx';
 import RetargetPage from './pages/RetargetPage.jsx';
+import LeadIntelligencePage from './components/LeadIntelligencePage.jsx';
 import { IG } from './constants.js';
 import InstagramSidebar from './components/instagram/InstagramSidebar.jsx';
 import EmailSidebar from './components/email/EmailSidebar.jsx';
@@ -46,7 +47,7 @@ function EmailComingSoon({ title }) {
 
 const VALID_PAGES = new Set([
   'home', 'chatbot-builder', 'template-builder', 'chats',
-  'contacts', 'pipelines', 'retarget', 'bulk-message', 'target-message', 'admin-settings', 'media-library',
+  'contacts', 'pipelines', 'retarget', 'lead-intelligence', 'bulk-message', 'target-message', 'admin-settings', 'media-library',
   'ig-inbox', 'ig-contacts', 'ig-templates', 'ig-campaigns', 'ig-workflow', 'ig-analytics', 'ig-settings', 'ig-accounts',
   'email-dashboard', 'email-campaigns', 'email-inbox', 'email-contacts', 'email-templates', 'email-settings',
 ]);
@@ -128,6 +129,7 @@ export default function App() {
       case 'contacts': return <ContactsPage user={user} />;
       case 'pipelines': return <PipelinesPage user={user} />;
       case 'retarget': return <RetargetPage user={user} />;
+      case 'lead-intelligence': return <LeadIntelligencePage user={user} />;
       case 'template-builder': return <TemplateBuilderPage />;
       case 'media-library': return <MediaLibraryPage />;
       case 'bulk-message': return <BulkMessagePage />;

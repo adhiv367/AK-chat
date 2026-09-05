@@ -87,3 +87,10 @@ backendlog.txt
 campaigns_current.txt
 email_current.txt
 inspect.txt
+
+patch_webhook.py
+restore_list.txt
+restore_list_filtered.txt
+schema_dump.txt
+tables_full.txt
+akchat_backup.dump

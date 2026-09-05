@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
@@ -9,6 +9,7 @@ const pool = require('./db');
 const { router: authRouter, authMiddleware, ensureTables } = require('./auth');
 const { router: messagesRouter } = require('./routes/messages');
 const { router: webhookRouter } = require('./routes/webhook');
+const { router: leadIntelligenceRouter } = require('./routes/leadIntelligence');
 const { router: categoriesRouter } = require('./routes/categories');
 const { router: contactFieldsRouter } = require('./routes/contactFields');
 const { router: contactsRouter } = require('./routes/contacts');
@@ -32,9 +33,7 @@ const { startSheetSyncScheduler, stopSheetSyncScheduler } = require('./services/
 const { ensureInstagramTables } = require('./db/instagramSchema');
 const { ensureRetargetTables } = require('./db/retargetSchema');
 const { ensureEmailTables } = require('./db/emailSchema');
-const { router: emailRouter } = require('./routes/email');
-const { router: emailInboxRouter } = require('./routes/emailInbox');
-const { startEmailInboxPoller } = require('./services/emailInboxPoller');
+//const { router: emailRouter } = require('./routes/email');
 const { router: retargetRouter } = require('./routes/retarget');
 const { router: instagramInboxRouter } = require('./routes/instagram/instagramInbox');
 const { router: instagramContactsRouter } = require('./routes/instagram/instagramContacts');
@@ -119,11 +118,12 @@ app.use(apiLimiter);
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-// Public routes (webhook from n8n â€” no auth)
+// Public routes (webhook from n8n — no auth)
 app.use('/api', webhookRouter);
 app.use('/api', instagramWebhookRouter);
+app.use('/api', leadIntelligenceRouter);
 
-// Instagram OAuth (public â€” this is Instagram redirecting the user's raw
+// Instagram OAuth (public — this is Instagram redirecting the user's raw
 // browser back to us after login/consent; there is no AKChat login cookie
 // on this request, so it must never sit behind authMiddleware)
 app.use('/api/instagram/oauth', instagramOAuthRouter);
@@ -158,8 +158,7 @@ app.use('/api', authMiddleware, instagramSettingsRouter);
 app.use('/api', authMiddleware, instagramAnalyticsRouter);
 app.use('/api', authMiddleware, instagramAccountsRouter);
 app.use('/api', authMiddleware, retargetRouter);
-app.use('/api', authMiddleware, emailRouter);
-app.use('/api', authMiddleware, emailInboxRouter);
+//app.use('/api', authMiddleware, emailRouter);
 
 
 
@@ -201,7 +200,6 @@ startBroadcastScheduler();
 console.log("STEP 6");
 
 startSheetSyncScheduler();
-startEmailInboxPoller();
 console.log("STEP 7");
 
 
@@ -244,7 +242,7 @@ refreshAllAccounts()
   }, 30 * 60 * 1000).unref();
 
   // Template status auto-sync: Meta does NOT push template approval/rejection
-  // status â€” we must poll. The tick fires every 10 min but only calls Meta while
+  // status — we must poll. The tick fires every 10 min but only calls Meta while
   // at least one template is still awaiting review (status='SUBMITTED'). Once all
   // are resolved (approved/rejected/etc.) it idles with zero Meta calls, and
   // auto-resumes when a new template is submitted. Override interval with
@@ -256,10 +254,10 @@ refreshAllAccounts()
         `SELECT COUNT(*)::int AS pending FROM coexistence.message_templates WHERE status = 'SUBMITTED'`
       );
       const pending = rows[0]?.pending || 0;
-      if (pending === 0) return; // all resolved â†’ skip Meta entirely (idle)
+      if (pending === 0) return; // all resolved → skip Meta entirely (idle)
       const r = await syncAllAccountTemplates();
       if (r.totalUpdated > 0) {
-        console.log(`[template-sync] ${pending} pending â†’ updated ${r.totalUpdated} template(s)`);
+        console.log(`[template-sync] ${pending} pending → updated ${r.totalUpdated} template(s)`);
       }
     } catch (err) {
       console.error('[template-sync] error:', err.message);
@@ -274,7 +272,7 @@ refreshAllAccounts()
 
   // Graceful shutdown so BullMQ marks in-flight jobs as stalled (not lost)
   const shutdown = async (sig) => {
-    console.log(`[AKchat] ${sig} received, drainingâ€¦`);
+    console.log(`[AKchat] ${sig} received, draining…`);
     server.close(() => {});
     await shutdownMediaQueue();
     await shutdownSendQueue();
@@ -289,7 +287,3 @@ start().catch(err => {
   console.error('[Fatal] Failed to start:', err.message);
   process.exit(1);
 });
-
-
-
-

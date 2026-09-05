@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   LayoutGrid, Zap, LayoutTemplate, MessageCircle, Users,
   Megaphone, Image as ImageIcon, KanbanSquare, Target,
-  ChevronLeft, ChevronRight, Repeat,
+  ChevronLeft, ChevronRight, Repeat, TrendingUp,
 } from 'lucide-react';
 import { C, DISPLAY_FONT, FONT } from '../constants.js';
 
@@ -24,6 +24,7 @@ const NAV_GROUPS = [
       { id: 'contacts', label: 'Client Directory', Icon: Users },
       { id: 'pipelines', label: 'Deal Pipeline', Icon: KanbanSquare },
       { id: 'retarget', label: 'Retarget', Icon: Repeat },
+      { id: 'lead-intelligence', label: 'Lead Intelligence', Icon: TrendingUp }, 
     ],
   },
   {
