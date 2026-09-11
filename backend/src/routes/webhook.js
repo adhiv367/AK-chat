@@ -1,4 +1,4 @@
-const { Router } = require('express');
+﻿const { Router } = require('express');
 const pool = require('../db');
 const { decrypt } = require('../util/crypto');
 const { findProduct } =
@@ -25,7 +25,7 @@ const router = Router();
  * Handles: text, image, video, audio, document, location, sticker, contacts,
  *          interactive (button_reply / list_reply), reaction, and status updates.
  */
-// Normalize WhatsApp phone numbers to digits-only — strips '+', spaces, dashes.
+// Normalize WhatsApp phone numbers to digits-only â€” strips '+', spaces, dashes.
 // Meta sometimes includes leading '+' in display_phone_number, sometimes not;
 // without this, the same conversation lands under two different wa_numbers and
 // shows as duplicate chat threads.
@@ -207,7 +207,7 @@ function parseMetaPayload(body) {
 /**
  * POST /api/webhook/whatsapp
  * Receives raw Meta WhatsApp webhook payloads forwarded by n8n.
- * No auth required — called by internal n8n instance.
+ * No auth required â€” called by internal n8n instance.
  */
 router.post('/webhook/whatsapp', async (req, res) => {
   
@@ -225,7 +225,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
       return res.status(403).json({ error: 'Invalid webhook signature' });
     }
     if (sig === null) {
-      console.warn('[webhook] META_APP_SECRET not set — inbound webhook signature NOT verified (set it to reject forged payloads).');
+      console.warn('[webhook] META_APP_SECRET not set â€” inbound webhook signature NOT verified (set it to reject forged payloads).');
     }
 
     const payload = req.body;
@@ -252,7 +252,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
       for (const r of allRecords) {
         // Status receipts (sent/delivered/read/failed) update the ORIGINAL
-        // message's status — they must never create a chat row. Inserting them
+        // message's status â€” they must never create a chat row. Inserting them
         // produced phantom "Status: delivered" bubbles. If no matching message
         // exists (e.g. an app-sent message we don't track), this is a no-op.
         if (r.message_type === 'status') {
@@ -263,7 +263,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
           continue;
         }
 
-        // Reactions are NOT chat bubbles — attach the emoji to the message it
+        // Reactions are NOT chat bubbles â€” attach the emoji to the message it
         // reacts to (message_reactions). An empty emoji removes the reaction.
         if (r.message_type === 'reaction') {
           const tgt = r.reaction?.targetMessageId;
@@ -307,7 +307,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
         // Upsert the WhatsApp profile/push name into profile_name (NOT name).
         // `name` is reserved for a name we explicitly captured (AI ask-name flow
-        // or manual save) so inbound messages don't clobber it — that clobbering
+        // or manual save) so inbound messages don't clobber it â€” that clobbering
         // is what made the automation "is the contact known?" condition always
         // true. Display falls back to COALESCE(name, profile_name).
         if (r.contact_number && r.wa_number && r.contact_name) {
@@ -334,7 +334,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
     // 1. For incoming messages (keyword, anyMessage, newContact triggers)
     //    First: if this conversation has paused executions awaiting a reply,
     //    resume them and SKIP fresh trigger evaluation for that record
-    //    (the customer is mid-conversation — see plan: "Resume only — skip
+    //    (the customer is mid-conversation â€” see plan: "Resume only â€” skip
     //    new trigger").
     const incomingRecords = allRecords.filter(r => r.direction === 'incoming' && r.message_type !== 'status' && r.message_type !== 'reaction');
     if (incomingRecords.length > 0) {
@@ -380,10 +380,10 @@ if (product) {
 
 
 
-          // ── Invi Creation AI Reply ──────────────────────────
+          // â”€â”€ Invi Creation AI Reply â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           // CONTROL RULES (both must pass for AI to fire):
-          // RULE 1: "Manual Reply" tag — if contact has this tag, skip AI.
-          // RULE 2: Agent-reply timestamp — if agent replied after this message, skip.
+          // RULE 1: "Manual Reply" tag â€” if contact has this tag, skip AI.
+          // RULE 2: Agent-reply timestamp â€” if agent replied after this message, skip.
           // MESSAGE TYPES: text, interactive (button tap), image (customer photo)
           // AI RESPONSE TYPES:
           //   { type:"text",        reply:"..." }
@@ -394,7 +394,7 @@ if (product) {
             const isHandled = msgType === 'text' || msgType === 'interactive' || msgType === 'image';
 
             if (isHandled) {
-              // ── RULE 1: Manual Reply tag check ───────────────────────────
+              // â”€â”€ RULE 1: Manual Reply tag check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               const { rows: contactRows } = await pool.query(
                 `SELECT tags, last_agent_reply_at FROM coexistence.contacts
                   WHERE wa_number = $1 AND contact_number = $2
@@ -406,7 +406,7 @@ if (product) {
               if (hasManualReplyTag(contactTags)) {
                 console.log(`[AI] Skipped -- "Manual Reply" tag set for ${record.contact_number}`);
               } else {
-                // ── RULE 2: Agent-already-replied check ────────────────────
+                // â”€â”€ RULE 2: Agent-already-replied check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 const lastAgentReplyAt = contactRows.length > 0 ? contactRows[0].last_agent_reply_at : null;
                 const customerMsgTime = new Date(record.timestamp).getTime();
                 const agentReplyTime  = lastAgentReplyAt ? new Date(lastAgentReplyAt).getTime() : 0;
@@ -415,7 +415,7 @@ if (product) {
                 if (agentAlreadyReplied) {
                   console.log(`[AI] Skipped -- agent replied after ${record.contact_number}'s message`);
                 } else {
-                  // ── Build payload for ai_bridge ────────────────────────
+                  // â”€â”€ Build payload for ai_bridge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                   const aiPayload = { customer_id: record.contact_number, wa_number: record.wa_number };
                   if (msgType === 'image') {
                     aiPayload.message = record.message_body || '';
@@ -448,7 +448,7 @@ if (product) {
                         const toNum = String(record.contact_number).replace(/\D/g, '');
 
                         if (aiType === 'interactive' && aiButtons.length > 0) {
-                          // ─ WhatsApp interactive reply-button message ─
+                          // â”€ WhatsApp interactive reply-button message â”€
                           // Build the Cloud API "interactive" payload here so
                           // enqueueSend / messageSender receives the exact shape
                           // WhatsApp expects.
@@ -474,14 +474,14 @@ if (product) {
                           await enqueueSend({ kind: 'interactive', localMessageId: localId, accountId: account.id, to: toNum, payload: interactivePayload });
                           console.log('[AI] Sent interactive to', toNum, 'with', waButtons.length, 'buttons');
                         } else if (aiType === 'product' && aiImage) {
-                          // ─ Product: image first, then text ─
+                          // â”€ Product: image first, then text â”€
                           const imgId = await insertPendingRow({ account, toNumber: toNum, messageType: 'image', messageBody: null, mediaUrl: aiImage });
                           await enqueueSend({ kind: 'media', localMessageId: imgId, accountId: account.id, to: toNum, payload: { type: 'image', link: aiImage, caption: '' } });
                           const localId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiReply });
                           await enqueueSend({ kind: 'text', localMessageId: localId, accountId: account.id, to: toNum, payload: { body: aiReply } });
                           console.log('[AI] Sent product to', toNum);
                         } else {
-                          // ─ Plain text ─
+                          // â”€ Plain text â”€
                           const localId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiReply });
                           await enqueueSend({ kind: 'text', localMessageId: localId, accountId: account.id, to: toNum, payload: { body: aiReply } });
                           console.log('[AI] Replied to', toNum, ':', aiReply);
@@ -495,7 +495,7 @@ if (product) {
           } catch (aiErr) {
             console.error('[AI] Reply error:', aiErr.message);
           }
-          // ────────────────────────────────────────────────────
+          // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
           await evaluateTriggers(record);
         } catch (triggerErr) {
@@ -529,14 +529,14 @@ if (product) {
   } catch (err) {
     console.error('[webhook] Error:', err.message);
     // Always return 200 to n8n so it doesn't retry infinitely. Use a static
-    // message — err.message can carry internal Postgres/schema details.
+    // message â€” err.message can carry internal Postgres/schema details.
     res.status(200).json({ ok: false, error: 'Processing error' });
   }
 });
 
 /**
  * GET /api/webhook/whatsapp
- * Meta webhook verification endpoint (for direct Meta → AKchat webhooks).
+ * Meta webhook verification endpoint (for direct Meta â†’ AKchat webhooks).
  * Not needed for n8n forwarding, but included for completeness.
  */
 router.get('/webhook/whatsapp', async (req, res) => {
@@ -567,7 +567,7 @@ router.get('/webhook/whatsapp', async (req, res) => {
   if (accepted) {
     console.log('[webhook] Meta verification accepted');
     // Echo the challenge as plain text (Meta sends a numeric token). Sending it
-    // as text/plain — not the res.send default of text/html — prevents the
+    // as text/plain â€” not the res.send default of text/html â€” prevents the
     // reflected value from being interpreted as HTML (reflected-XSS).
     return res.status(200).type('text/plain').send(String(challenge ?? ''));
   }
@@ -578,10 +578,10 @@ router.get('/webhook/whatsapp', async (req, res) => {
 /**
  * PHASE 3: internal endpoint called by the Python AI bridge when a new
  * product matches a customer's tracked interest. Creates a DRAFT broadcast
- * for manual review — NEVER sends automatically. Reuses the same
+ * for manual review â€” NEVER sends automatically. Reuses the same
  * coexistence.broadcasts table and template-sending pipeline as the real
  * Broadcast Studio, so review/approval/sending all happen through the
- * existing UI. No auth — internal use only.
+ * existing UI. No auth â€” internal use only.
  */
 router.post('/internal/prepare-followup', async (req, res) => {
   try {
@@ -605,7 +605,7 @@ router.post('/internal/prepare-followup', async (req, res) => {
         account.displayPhoneNumber,
         JSON.stringify([{ contact_number: customer_number, name: '' }]),
         template_id,
-        name || `Interest follow-up — ${customer_number}`,
+        name || `Interest follow-up â€” ${customer_number}`,
         JSON.stringify(variable_mapping),
       ]
     );
@@ -617,5 +617,73 @@ router.post('/internal/prepare-followup', async (req, res) => {
     res.status(500).json({ error: 'Failed to create draft broadcast' });
   }
 });
+
+/**
+ * PHASE 4: sends an order confirmation immediately (no draft/review step)
+ * when a Shopify order is created. Unlike /internal/prepare-followup,
+ * this calls enqueueSend directly — reuses the same real send pipeline
+ * as Broadcast Studio (resolveAccount, insertPendingRow, enqueueSend),
+ * just skips the DRAFT/manual-approval step since order confirmations
+ * are expected to be instant.
+ */
+router.post('/internal/send-order-confirmation', async (req, res) => {
+  console.log('[PHASE4-DEBUG] Route handler entered. Body:', JSON.stringify(req.body));
+  try {
+    const { customer_number, template_id, variable_mapping } = req.body;
+    if (!customer_number || !template_id || !variable_mapping) {
+      return res.status(400).json({ error: 'customer_number, template_id, and variable_mapping are required' });
+    }
+
+    const { getSingleAccount } = require('./whatsappAccounts');
+    const account = await getSingleAccount();
+    if (!account) {
+      return res.status(500).json({ error: 'No WhatsApp Business account registered' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT id, name, language, body FROM coexistence.message_templates WHERE id = $1 AND status = 'APPROVED'`,
+      [template_id]
+    );
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'Template not found or not approved yet' });
+    }
+    const template = rows[0];
+
+    // Body-only template — order_confirmation has no header/buttons.
+    const bodyVars = Object.keys(variable_mapping)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((k) => ({ type: 'text', text: String(variable_mapping[k]) }));
+    const components = [{ type: 'body', parameters: bodyVars }];
+
+    const { insertPendingRow } = require('../services/messageSender');
+    const { enqueueSend } = require('../queue/sendQueue');
+
+    const localId = await insertPendingRow({
+      account,
+      toNumber: customer_number,
+      messageType: 'template',
+      messageBody: template.body || `Template: ${template.name}`,
+    });
+
+    await enqueueSend({
+      kind: 'template',
+      accountId: account.id,
+      to: String(customer_number).replace(/\D/g, ''),
+      localMessageId: localId,
+      payload: {
+        name: template.name,
+        languageCode: template.language || 'en',
+        components,
+      },
+    });
+
+    console.log(`[PHASE4] Order confirmation sent to ${customer_number}`);
+    res.status(200).json({ status: 'sent' });
+  } catch (err) {
+    console.error('[send-order-confirmation] Error:', err.message);
+    res.status(500).json({ error: 'Failed to send order confirmation' });
+  }
+});
 module.exports = { router };
+
 
