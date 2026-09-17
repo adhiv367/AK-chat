@@ -29,3 +29,4 @@ async function fetchNewRetargetRows(sheetUrl, lastSyncedRow = 0) {
 }
 
 module.exports = { fetchNewRetargetRows, parseSheetIdAndGid };
+

@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "axios": "^1.19.0",
+    "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.77.2",
     "cookie-parser": "^1.4.6",
@@ -22,13 +22,12 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.3.1",
     "helmet": "^7.1.0",
-    "imapflow": "^1.7.0",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
-    "mailparser": "^3.9.15",
     "multer": "^2.1.1",
-    "node-cron": "^4.6.0",
-    "pg": "^8.21.0"
+    "nodemailer": "^9.0.5",
+    "pg": "^8.21.0",
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
@@ -37,3 +36,5 @@
     "uuid": "^11.1.1"
   }
 }
+
+

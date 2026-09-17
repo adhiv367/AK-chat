@@ -6,9 +6,14 @@ const { Queue, Worker, QueueEvents } = require('bullmq');
 const IORedis = require('ioredis');
 const pool = require('../db');
 const { getAccountWithToken } = require('../routes/whatsappAccounts');
-const { sendText, sendTemplate, sendMedia, sendInteractive, sendLocation, sendContacts, sendReaction } = require('../integrations/metaSend');
+const { sendText, sendTemplate, sendMedia, sendInteractive, sendFlowMessage, sendLocation, sendContacts, sendReaction } = require('../integrations/metaSend');
 const { markSent, markFailed, formatSendError } = require('../services/messageSender');
 const { markAccountHealth, classifyMetaError } = require('../services/accountHealth');
+// Phase 8A — message usage metering. Incremented ONLY below, right after a
+// successful markSent() actually updates the pending row — never on
+// enqueue, never on failure, never on a retry attempt that doesn't reach
+// this line. See messageUsageService.js for the counting contract.
+const { incrementMessageUsage } = require('../services/messageUsageService');
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
 const QUEUE_NAME = 'akchat-send';
@@ -39,6 +44,8 @@ let queueEvents = null;
  *     // text:    { body, previewUrl? }
  *     // template:{ name, languageCode, components, broadcastLogId? }
  *     // media:   { type, mediaId | link, caption?, filename? }
+ *     // flow:    { flowId, flowToken, flowCta, bodyText, headerText?,
+ *     //            footerText?, flowAction?, flowActionPayload? }
  *   },
  *   originRef?: {             // optional cross-table linkage for status writes
  *     kind: 'broadcast_log' | 'automation_step',
@@ -79,6 +86,18 @@ async function processJob(job) {
       result = await sendMedia({ ...args, type: payload.type, mediaId: payload.mediaId, link: payload.link, caption: payload.caption, filename: payload.filename, contextMessageId: payload.contextMessageId });
     } else if (kind === 'interactive') {
       result = await sendInteractive({ ...args, interactive: payload.interactive });
+    } else if (kind === 'flow') {
+      result = await sendFlowMessage({
+        ...args,
+        flowId: payload.flowId,
+        flowToken: payload.flowToken,
+        flowCta: payload.flowCta,
+        bodyText: payload.bodyText,
+        headerText: payload.headerText,
+        footerText: payload.footerText,
+        flowAction: payload.flowAction,
+        flowActionPayload: payload.flowActionPayload,
+      });
     } else if (kind === 'location') {
       result = await sendLocation({ ...args, latitude: payload.latitude, longitude: payload.longitude, name: payload.name, address: payload.address });
     } else if (kind === 'contacts') {
@@ -113,7 +132,17 @@ async function processJob(job) {
   if (!wamid) throw new Error('Meta returned no message id');
 
   // Swap the optimistic row's local id for the real wamid
-  if (localMessageId) await markSent(localMessageId, wamid);
+  if (localMessageId) {
+    const updated = await markSent(localMessageId, wamid, account.workspaceId);
+    // Phase 8A: only count a message when markSent actually updated a row
+    // (updated === true) — a false/duplicate result (e.g. a repeat call for
+    // an already-swapped localId) is never counted, which is what prevents
+    // double-counting on retries/re-processing. Never awaited into the
+    // critical path in a way that could affect delivery — errors are
+    // logged and swallowed by incrementMessageUsage() itself, and this
+    // never touches the existing retry/error-handling logic below.
+    if (updated && account.workspaceId) await incrementMessageUsage(account.workspaceId);
+  }
 
   // Update origin-side linkage (broadcast_log etc) if provided
   if (originRef?.kind === 'broadcast_log' && originRef.id) {
@@ -131,6 +160,21 @@ async function processJob(job) {
         WHERE id = $2`,
       [wamid, originRef.id]
     ).catch(() => {});
+  }
+  // Phase 7C — Sequence Scheduler integration hook. Additive only, mirrors
+  // the broadcast_log branch above exactly: once Meta actually accepts the
+  // message, swap the sequence_step_executions row's temporary correlation
+  // value (the chat_history localMessageId, stashed in wa_message_id by
+  // sequenceScheduler.js at enqueue time) for the real wamid and flip the
+  // row to 'sent'. This is the "safest integration point" for Part 8 —
+  // reuses the existing success path instead of a parallel delivery-tracker.
+  if (originRef?.kind === 'sequence_step_execution' && originRef.id) {
+    await pool.query(
+      `UPDATE coexistence.sequence_step_executions
+          SET status = 'sent', wa_message_id = $1, executed_at = NOW()
+        WHERE id = $2`,
+      [wamid, originRef.id]
+    ).catch(err => console.error('[sendQueue] sequence_step_execution update failed:', err.message));
   }
 
   return { wamid };
@@ -161,6 +205,19 @@ function startSendWorker() {
         const detail = formatSendError(err);
         await pool.query(
           `UPDATE coexistence.broadcast_logs SET status='failed', error_message=$1 WHERE id=$2`,
+          [detail.slice(0, 500), job.data.originRef.id]
+        ).catch(() => {});
+      }
+      // Phase 7C — same reasoning as the broadcast_log branch above: persist
+      // the real Meta failure onto the sequence_step_executions row once all
+      // retry attempts are exhausted. The sequence itself was already
+      // advanced past this step at enqueue time (see sequenceScheduler.js);
+      // this only updates the execution record for observability/history,
+      // per Part 6 ("do not lose the error message").
+      if (job?.data?.originRef?.kind === 'sequence_step_execution') {
+        const detail = formatSendError(err);
+        await pool.query(
+          `UPDATE coexistence.sequence_step_executions SET status='failed', error_message=$1 WHERE id=$2`,
           [detail.slice(0, 500), job.data.originRef.id]
         ).catch(() => {});
       }
@@ -202,3 +259,4 @@ async function shutdownSendQueue() {
 }
 
 module.exports = { sendQueue, startSendWorker, enqueueSend, shutdownSendQueue };
+

@@ -7,6 +7,11 @@ const router = Router();
 // Custom contact field definitions. The owner defines fields here (Settings →
 // Fields); contacts can then carry a value per field (stored in
 // coexistence.contacts.custom_fields JSONB, keyed by field id).
+//
+// Phase 6 Gap #1: workspace_id is always taken from req.workspace (server-derived
+// from the session — see middleware/workspaceContext.js), never trusted
+// from the client. A caller with no workspace sees an empty list, mirroring
+// the convention in routes/categories.js.
 
 const FIELD_TYPES = ['text', 'number', 'phone', 'email', 'date', 'url', 'textarea'];
 
@@ -18,13 +23,17 @@ function normType(t) {
   return FIELD_TYPES.includes(t) ? t : 'text';
 }
 
-// GET /api/contact-fields — list all field definitions (sorted)
+// GET /api/contact-fields — list all field definitions for the caller's workspace
 router.get('/contact-fields', async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.json([]);
     const { rows } = await pool.query(
       `SELECT id, name, description, field_type, sort_order, created_at, updated_at
        FROM coexistence.contact_field_definitions
-       ORDER BY sort_order ASC, name ASC`
+       WHERE workspace_id = $1
+       ORDER BY sort_order ASC, name ASC`,
+      [workspaceId]
     );
     res.json(rows);
   } catch (err) {
@@ -33,9 +42,11 @@ router.get('/contact-fields', async (req, res) => {
   }
 });
 
-// POST /api/contact-fields — create a field definition
+// POST /api/contact-fields — create a field definition in the caller's workspace
 router.post('/contact-fields', requirePermission('admin-settings:fields'), async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(403).json({ error: 'No workspace found for this account' });
     const { name, description, fieldType, sortOrder } = req.body || {};
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Field name is required' });
@@ -43,10 +54,10 @@ router.post('/contact-fields', requirePermission('admin-settings:fields'), async
     const id = genId('fld');
     const { rows } = await pool.query(
       `INSERT INTO coexistence.contact_field_definitions
-         (id, name, description, field_type, sort_order)
-       VALUES ($1, $2, $3, $4, $5)
+         (id, name, description, field_type, sort_order, workspace_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, name, description, field_type, sort_order, created_at, updated_at`,
-      [id, name.trim(), (description || '').trim() || null, normType(fieldType), Number.isFinite(+sortOrder) ? +sortOrder : 0]
+      [id, name.trim(), (description || '').trim() || null, normType(fieldType), Number.isFinite(+sortOrder) ? +sortOrder : 0, workspaceId]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -55,24 +66,27 @@ router.post('/contact-fields', requirePermission('admin-settings:fields'), async
   }
 });
 
-// PUT /api/contact-fields/:id — update a field definition
+// PUT /api/contact-fields/:id — update a field definition belonging to the caller's workspace
 router.put('/contact-fields/:id', requirePermission('admin-settings:fields'), async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(404).json({ error: 'Field not found' });
     const { name, description, fieldType, sortOrder } = req.body || {};
     if (name !== undefined && (!name || !name.trim())) {
       return res.status(400).json({ error: 'Field name cannot be empty' });
     }
     const { rows } = await pool.query(
       `UPDATE coexistence.contact_field_definitions SET
-         name        = COALESCE($2, name),
-         description  = $3,
-         field_type   = COALESCE($4, field_type),
-         sort_order   = COALESCE($5, sort_order),
+         name        = COALESCE($3, name),
+         description  = $4,
+         field_type   = COALESCE($5, field_type),
+         sort_order   = COALESCE($6, sort_order),
          updated_at   = NOW()
-       WHERE id = $1
+       WHERE id = $1 AND workspace_id = $2
        RETURNING id, name, description, field_type, sort_order, created_at, updated_at`,
       [
         req.params.id,
+        workspaceId,
         name !== undefined ? name.trim() : null,
         description !== undefined ? ((description || '').trim() || null) : null,
         fieldType !== undefined ? normType(fieldType) : null,
@@ -87,12 +101,14 @@ router.put('/contact-fields/:id', requirePermission('admin-settings:fields'), as
   }
 });
 
-// DELETE /api/contact-fields/:id — remove a field definition
+// DELETE /api/contact-fields/:id — remove a field definition belonging to the caller's workspace
 router.delete('/contact-fields/:id', requirePermission('admin-settings:fields'), async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(404).json({ error: 'Field not found' });
     const { rowCount } = await pool.query(
-      `DELETE FROM coexistence.contact_field_definitions WHERE id = $1`,
-      [req.params.id]
+      `DELETE FROM coexistence.contact_field_definitions WHERE id = $1 AND workspace_id = $2`,
+      [req.params.id, workspaceId]
     );
     if (rowCount === 0) return res.status(404).json({ error: 'Field not found' });
     res.json({ ok: true });

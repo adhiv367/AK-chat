@@ -59,3 +59,4 @@ test('verifyMetaSignature returns false when the raw body is absent', () => {
   assert.equal(verifyMetaSignature(mockReq(sign('top-secret-app-secret', '{}'), null)), false);
   delete process.env.META_APP_SECRET;
 });
+

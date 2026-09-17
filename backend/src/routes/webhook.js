@@ -1,4 +1,4 @@
-﻿const { Router } = require('express');
+const { Router } = require('express');
 const pool = require('../db');
 const { decrypt } = require('../util/crypto');
 const { findProduct } =
@@ -17,15 +17,25 @@ const { markPending, MEDIA_TYPES } = require('../services/mediaDownloader');
 const { enqueueMediaDownload } = require('../queue/mediaQueue');
 const { resolveAccount, insertPendingRow } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
+const { prepareProductImage } = require('../services/imagePrep');
+const { uploadMedia } = require('../integrations/metaSend');
+const { syncConversationToZoho } = require('../services/zohoSyncService');
+const { recordFlowSubmission } = require('../services/flowSubmissionService');
+const orderService = require('../services/orderService'); // Phase 7.7 — Cart
 
 const router = Router();
+
+// Temporary test switch for Phase 4.1: allows disabling the external Grok AI
+// Bridge so the native AK Chat Gemini ai_reply path can be tested in isolation.
+// Absent or any value other than the literal string 'false' => Bridge stays enabled.
+const AI_BRIDGE_ENABLED = process.env.AI_BRIDGE_ENABLED !== 'false';
 
 /**
  * Parse a Meta WhatsApp Cloud API webhook payload and extract message records.
  * Handles: text, image, video, audio, document, location, sticker, contacts,
  *          interactive (button_reply / list_reply), reaction, and status updates.
  */
-// Normalize WhatsApp phone numbers to digits-only â€” strips '+', spaces, dashes.
+// Normalize WhatsApp phone numbers to digits-only — strips '+', spaces, dashes.
 // Meta sometimes includes leading '+' in display_phone_number, sometimes not;
 // without this, the same conversation lands under two different wa_numbers and
 // shows as duplicate chat threads.
@@ -123,19 +133,34 @@ function parseMetaPayload(body) {
         } else if (type === 'interactive' && msg.interactive) {
           const btnReply  = msg.interactive.button_reply  || null;
           const listReply = msg.interactive.list_reply    || null;
+          // Phase 6.5 — WhatsApp Flow submission. Kept as its own
+          // message_type ('flow_response'), NOT 'interactive', so it does
+          // not fall into the existing button_reply/list_reply AI-reply
+          // path below (which keys off msgType === 'interactive') — purely
+          // additive; button_reply/list_reply behavior is untouched.
+          const nfmReply  = msg.interactive.nfm_reply     || null;
           if (btnReply) {
             // Encode as "ID::<id>::<title>" so ai_bridge.py can extract btn_id
             const btnId    = btnReply.id    || '';
             const btnTitle = btnReply.title || '';
             record.message_body = `ID::${btnId}::${btnTitle}`;
+            record.message_type = 'interactive';
           } else if (listReply) {
             const listId    = listReply.id    || '';
             const listTitle = listReply.title || '';
             record.message_body = `ID::${listId}::${listTitle}`;
+            record.message_type = 'interactive';
+          } else if (nfmReply) {
+            record.message_body = nfmReply.body || 'Flow response received';
+            record.message_type = 'flow_response';
+            // Raw block only — resolved/persisted downstream by
+            // flowSubmissionService.recordFlowSubmission(), never trusted
+            // as-is for workspace/flow identity.
+            record.nfm_reply = nfmReply;
           } else {
             record.message_body = 'Interactive response';
+            record.message_type = 'interactive';
           }
-          record.message_type = 'interactive';
         } else if (type === 'reaction' && msg.reaction) {
           record.message_body = `Reaction: ${msg.reaction.emoji || ''}`;
           record.message_type = 'reaction';
@@ -148,7 +173,13 @@ function parseMetaPayload(body) {
             from: msg.from || null,
           };
         } else if (type === 'order' && msg.order) {
-          record.message_body = 'Order received';
+          const itemCount = Array.isArray(msg.order.product_items) ? msg.order.product_items.length : 0;
+          record.message_body = itemCount > 0 ? `Order received (${itemCount} item${itemCount === 1 ? '' : 's'})` : 'Order received';
+          // Phase 7.7 — Cart: raw block only, resolved/persisted downstream
+          // by orderService.createOrderFromWhatsappMessage(), never trusted
+          // as-is for workspace identity — mirrors the nfm_reply pattern
+          // just above.
+          record.order = msg.order;
         } else if (type === 'system' && msg.system) {
           record.message_body = msg.system.body || 'System message';
         } else if (type === 'unknown' && msg.errors) {
@@ -207,7 +238,7 @@ function parseMetaPayload(body) {
 /**
  * POST /api/webhook/whatsapp
  * Receives raw Meta WhatsApp webhook payloads forwarded by n8n.
- * No auth required â€” called by internal n8n instance.
+ * No auth required — called by internal n8n instance.
  */
 router.post('/webhook/whatsapp', async (req, res) => {
   
@@ -218,14 +249,19 @@ router.post('/webhook/whatsapp', async (req, res) => {
   try {
     // Authenticity: this endpoint is necessarily unauthenticated (public), so
     // the control is Meta's HMAC signature. When META_APP_SECRET is configured
-    // we REJECT anything unsigned/invalid; if it's not set we log a warning so
-    // operators know inbound webhooks are unverified.
+    // we REJECT anything unsigned/invalid.
+    // Phase 7.11 (F-4): previously, an unconfigured META_APP_SECRET caused this
+    // endpoint to log a warning and PROCESS the payload anyway (fail-open) —
+    // never process an unverifiable webhook as if it were trusted. This now
+    // matches billing.js's POST /billing/webhook fail-closed pattern for its
+    // own null (unconfigured) case: reject rather than proceed.
     const sig = verifyMetaSignature(req);
     if (sig === false) {
       return res.status(403).json({ error: 'Invalid webhook signature' });
     }
     if (sig === null) {
-      console.warn('[webhook] META_APP_SECRET not set â€” inbound webhook signature NOT verified (set it to reject forged payloads).');
+      console.error('[webhook] META_APP_SECRET not configured — rejecting inbound webhook (cannot verify authenticity).');
+      return res.status(501).json({ error: 'Webhook signature verification is not configured' });
     }
 
     const payload = req.body;
@@ -252,18 +288,76 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
       for (const r of allRecords) {
         // Status receipts (sent/delivered/read/failed) update the ORIGINAL
-        // message's status â€” they must never create a chat row. Inserting them
+        // message's status — they must never create a chat row. Inserting them
         // produced phantom "Status: delivered" bubbles. If no matching message
         // exists (e.g. an app-sent message we don't track), this is a no-op.
         if (r.message_type === 'status') {
+          // Phase 6 Part 3B — ordering guard. Meta may re-deliver webhook
+          // events out of order (its own retries, or n8n forwarding jitter).
+          // Without a guard, a duplicate/late 'delivered' event arriving
+          // after 'read' was already recorded would regress the row back to
+          // 'delivered' — a real downgrade the UI (and the broadcast rollup
+          // in routes/broadcasts.js, which joins on this same status) must
+          // never show. Rank 'failed' alongside 'sent': it can supersede the
+          // optimistic 'sent' row (the normal case — Meta accepted the send,
+          // then delivery ultimately failed), but a message already marked
+          // delivered/read cannot regress to failed either. Ties (rank equal,
+          // e.g. duplicate delivery of the same status) are allowed through
+          // as a harmless no-op write — this is what keeps the update
+          // idempotent rather than needing a separate duplicate-detection
+          // table. Statuses outside this known set (e.g. 'sending', the
+          // initial inbound value) rank lowest and are always superseded.
           await client.query(
-            `UPDATE coexistence.chat_history SET status = $1 WHERE message_id = $2`,
+            `UPDATE coexistence.chat_history
+                SET status = $1
+              WHERE message_id = $2
+                AND (
+                  CASE status
+                    WHEN 'read' THEN 3
+                    WHEN 'delivered' THEN 2
+                    WHEN 'sent' THEN 1
+                    WHEN 'failed' THEN 1
+                    ELSE 0
+                  END
+                  <=
+                  CASE $1
+                    WHEN 'read' THEN 3
+                    WHEN 'delivered' THEN 2
+                    WHEN 'sent' THEN 1
+                    WHEN 'failed' THEN 1
+                    ELSE 0
+                  END
+                )`,
             [r.status, r.message_id]
           );
+
+          // Failure receipts must also propagate to broadcast_logs — chat_history
+          // alone drives the Delivery UI's sent/delivered/read rollup (via the
+          // wa_message_id -> chat_history.message_id join in getBroadcastWithLogs),
+          // but the failed/success counts there are read straight off
+          // broadcast_logs.status, which this status branch never touched. A
+          // send that Meta later fails post-acceptance (e.g. a billing-eligibility
+          // error) therefore stayed 'sent' forever with no error_message. Reuse
+          // the same wa_message_id correlation key the rollup query already
+          // uses — no new correlation mechanism. Only 'failed' is written here;
+          // sent/delivered/read continue to be derived from chat_history as
+          // before, so that behavior is untouched.
+          if (r.status === 'failed' && r.message_id) {
+            const firstError = Array.isArray(r.errors) && r.errors.length ? r.errors[0] : null;
+            const detail = firstError
+              ? `${firstError.title || firstError.message || 'Message failed'}${firstError.code ? ` (code ${firstError.code})` : ''}`
+              : 'Message failed';
+            await client.query(
+              `UPDATE coexistence.broadcast_logs
+                  SET status = 'failed', error_message = $1
+                WHERE wa_message_id = $2`,
+              [detail.slice(0, 500), r.message_id]
+            );
+          }
           continue;
         }
 
-        // Reactions are NOT chat bubbles â€” attach the emoji to the message it
+        // Reactions are NOT chat bubbles — attach the emoji to the message it
         // reacts to (message_reactions). An empty emoji removes the reaction.
         if (r.message_type === 'reaction') {
           const tgt = r.reaction?.targetMessageId;
@@ -307,17 +401,32 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
         // Upsert the WhatsApp profile/push name into profile_name (NOT name).
         // `name` is reserved for a name we explicitly captured (AI ask-name flow
-        // or manual save) so inbound messages don't clobber it â€” that clobbering
+        // or manual save) so inbound messages don't clobber it — that clobbering
         // is what made the automation "is the contact known?" condition always
         // true. Display falls back to COALESCE(name, profile_name).
         if (r.contact_number && r.wa_number && r.contact_name) {
+          // Phase 7.10A — FIX 2: a brand-new contact created here previously
+          // got workspace_id = NULL, since this insert path never set it.
+          // The workspace is already resolvable from the WhatsApp account
+          // that received the message (r.phone_number_id), same lookup
+          // resolveAccount()/getAccountByPhoneNumber() do elsewhere in this
+          // file — done here as a direct scoped query so it runs inside the
+          // same transaction as the insert. Only used for a NEW contact
+          // (via COALESCE below); an existing contact's workspace_id is
+          // never overwritten by a later message.
+          const { rows: acctRows } = await client.query(
+            `SELECT workspace_id FROM coexistence.whatsapp_accounts WHERE phone_number_id = $1 LIMIT 1`,
+            [r.phone_number_id]
+          );
+          const contactWorkspaceId = acctRows[0]?.workspace_id ?? null;
           await client.query(
-            `INSERT INTO coexistence.contacts (wa_number, contact_number, profile_name)
-             VALUES ($1, $2, $3)
+            `INSERT INTO coexistence.contacts (workspace_id, wa_number, contact_number, profile_name)
+             VALUES ($1, $2, $3, $4)
              ON CONFLICT (wa_number, contact_number) DO UPDATE SET
                profile_name = EXCLUDED.profile_name,
+               workspace_id = COALESCE(coexistence.contacts.workspace_id, EXCLUDED.workspace_id),
                updated_at = NOW()`,
-            [r.wa_number, r.contact_number, r.contact_name]
+            [contactWorkspaceId, r.wa_number, r.contact_number, r.contact_name]
           );
         }
       }
@@ -334,12 +443,144 @@ router.post('/webhook/whatsapp', async (req, res) => {
     // 1. For incoming messages (keyword, anyMessage, newContact triggers)
     //    First: if this conversation has paused executions awaiting a reply,
     //    resume them and SKIP fresh trigger evaluation for that record
-    //    (the customer is mid-conversation â€” see plan: "Resume only â€” skip
+    //    (the customer is mid-conversation — see plan: "Resume only — skip
     //    new trigger").
     const incomingRecords = allRecords.filter(r => r.direction === 'incoming' && r.message_type !== 'status' && r.message_type !== 'reaction');
     if (incomingRecords.length > 0) {
       for (const record of incomingRecords) {
         try {
+          // ── WhatsApp Flow submission storage (Phase 6.5) ─────
+          // Additive only: every other record type (text, image, button
+          // taps, etc.) is untouched and falls straight through to Zoho
+          // sync / automation below exactly as before. recordFlowSubmission
+          // never throws — a malformed/unresolvable Flow reply is logged
+          // and skipped, it never aborts webhook processing.
+          if (record.message_type === 'flow_response' && record.nfm_reply) {
+            try {
+              await recordFlowSubmission({
+                nfmReply: record.nfm_reply,
+                messageId: record.message_id,
+                phoneNumberId: record.phone_number_id,
+                contactNumber: record.contact_number,
+                timestamp: record.timestamp,
+                // Phase 6.6 — pass the SAME wa_number already computed for
+                // this record's own chat_history row (live Meta
+                // metadata.display_phone_number, normalized) so the
+                // downstream contact-mapping lookup keys off the exact
+                // value every other contact-creating path in this codebase
+                // uses for this delivery. Does not change what's written
+                // to chat_history/flow_submissions — purely an in-memory
+                // value already computed above, threaded through to fix
+                // contact-resolution consistency (see flowSubmissionService.js).
+                waNumber: record.wa_number,
+              });
+            } catch (flowSubErr) {
+              console.error('[webhook] Flow submission storage error:', flowSubErr.message);
+            }
+          }
+          // ────────────────────────────────────────────────────
+
+          // ── Automatic Zoho CRM sync ─────────────────────────
+          // Every eligible incoming WhatsApp message triggers the existing
+          // syncConversationToZoho() orchestration (extraction → Lead
+          // eligibility → Zoho field mapping → per-number connection →
+          // Lead create/update → Note → sync-state bookkeeping), scoped to
+          // THIS message's own resolved WhatsApp account context only —
+          // never a different/fallback account. Fired in the background
+          // (not awaited) so a slow Zoho/Gemini call never delays the
+          // WhatsApp response, and any error here is caught and logged —
+          // it must never affect the normal WhatsApp AI reply above.
+          //
+          // Placed BEFORE the paused-automation check/continue below so it
+          // fires exactly once per incoming record regardless of whether
+          // this record resumes a paused automation or takes the fresh
+          // trigger path — previously it lived after the `continue`, so
+          // any inbound message with an active paused automation resumed
+          // the automation and skipped Zoho sync entirely (Phase 8 bug).
+          try {
+            const { account: zohoAccount, error: zohoAcctErr } =
+              await resolveAccount({ fromPhoneNumber: record.phone_number_id });
+            if (zohoAcctErr || !zohoAccount || !zohoAccount.workspaceId) {
+              console.error('[Zoho] Sync skipped -- account resolve error:', zohoAcctErr || 'account has no workspaceId');
+            } else {
+              syncConversationToZoho({
+                workspaceId: zohoAccount.workspaceId,
+                whatsappAccountId: zohoAccount.id,
+                contactNumber: record.contact_number,
+              }).catch((syncErr) => {
+                console.error('[Zoho] Background sync error:', syncErr.message);
+              });
+            }
+          } catch (zohoTriggerErr) {
+            console.error('[Zoho] Sync trigger error:', zohoTriggerErr.message);
+          }
+          // ────────────────────────────────────────────────────
+
+          // ── WhatsApp-native Cart/Order ingestion (Phase 7.7) ──
+          // A customer tapping "Send Cart" on a WhatsApp catalog arrives
+          // here as message_type === 'order' with the raw Meta payload on
+          // record.order (see parseMessage's `type === 'order'` branch
+          // above). Resolved into coexistence.orders/order_items scoped to
+          // THIS message's own resolved WhatsApp account/workspace only —
+          // never a different/fallback account, same isolation model as
+          // the Zoho sync block above. Never throws — a malformed/
+          // unresolvable order is logged and skipped, it never aborts
+          // webhook processing for the rest of the batch.
+          if (record.message_type === 'order' && record.order) {
+            try {
+              const { account: orderAccount, error: orderAcctErr } =
+                await resolveAccount({ fromPhoneNumber: record.phone_number_id });
+              if (orderAcctErr || !orderAccount || !orderAccount.workspaceId) {
+                console.error('[webhook] Order ingestion skipped -- account resolve error:', orderAcctErr || 'account has no workspaceId');
+              } else {
+                const createdOrder = await orderService.createOrderFromWhatsappMessage(orderAccount.workspaceId, {
+                  whatsappAccountId: orderAccount.id,
+                  contactNumber: record.contact_number,
+                  waOrder: record.order,
+                  // Phase 7.10A — FIX 3: dedupe key for a redelivered Meta
+                  // webhook of the same inbound 'order' message.
+                  waMessageId: record.message_id || null,
+                });
+
+                // Phase 7.9 — link this inbound 'order' chat_history row to
+                // the order just created, via the same generic template_meta
+                // JSONB column messageSender.js already uses for outbound
+                // template rendering data. Read-only for MessageBubble.jsx
+                // (order line items/total/link) — never affects order
+                // creation itself, and any failure here is logged and
+                // swallowed, exactly like the rest of this ingestion block,
+                // so a chat-link problem can never fail the order or the
+                // wider webhook batch.
+                try {
+                  await pool.query(
+                    `UPDATE coexistence.chat_history SET template_meta = $1 WHERE message_id = $2`,
+                    [
+                      JSON.stringify({
+                        kind: 'order',
+                        orderId: createdOrder.id,
+                        orderNumber: createdOrder.order_number,
+                        total: createdOrder.total_amount,
+                        currency: createdOrder.currency,
+                        items: (createdOrder.items || []).map(it => ({
+                          name: it.product_name,
+                          quantity: it.quantity,
+                          unitPrice: it.unit_price,
+                          totalPrice: it.total_price,
+                        })),
+                      }),
+                      record.message_id,
+                    ]
+                  );
+                } catch (linkErr) {
+                  console.error('[webhook] Order chat-link update failed:', linkErr.message);
+                }
+              }
+            } catch (orderErr) {
+              console.error('[webhook] Order ingestion error:', orderErr.message);
+            }
+          }
+          // ────────────────────────────────────────────────────
+
           const { rows: pausedRows } = await pool.query(
             `SELECT id FROM coexistence.automation_executions
               WHERE wa_number=$1 AND contact_number=$2
@@ -377,13 +618,10 @@ if (product) {
   );
 
 }
-
-
-
-          // â”€â”€ Invi Creation AI Reply â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // ── Invi Creation AI Reply ──────────────────────────
           // CONTROL RULES (both must pass for AI to fire):
-          // RULE 1: "Manual Reply" tag â€” if contact has this tag, skip AI.
-          // RULE 2: Agent-reply timestamp â€” if agent replied after this message, skip.
+          // RULE 1: "Manual Reply" tag — if contact has this tag, skip AI.
+          // RULE 2: Agent-reply timestamp — if agent replied after this message, skip.
           // MESSAGE TYPES: text, interactive (button tap), image (customer photo)
           // AI RESPONSE TYPES:
           //   { type:"text",        reply:"..." }
@@ -394,7 +632,7 @@ if (product) {
             const isHandled = msgType === 'text' || msgType === 'interactive' || msgType === 'image';
 
             if (isHandled) {
-              // â”€â”€ RULE 1: Manual Reply tag check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              // ── RULE 1: Manual Reply tag check ───────────────────────────
               const { rows: contactRows } = await pool.query(
                 `SELECT tags, last_agent_reply_at FROM coexistence.contacts
                   WHERE wa_number = $1 AND contact_number = $2
@@ -406,7 +644,7 @@ if (product) {
               if (hasManualReplyTag(contactTags)) {
                 console.log(`[AI] Skipped -- "Manual Reply" tag set for ${record.contact_number}`);
               } else {
-                // â”€â”€ RULE 2: Agent-already-replied check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── RULE 2: Agent-already-replied check ────────────────────
                 const lastAgentReplyAt = contactRows.length > 0 ? contactRows[0].last_agent_reply_at : null;
                 const customerMsgTime = new Date(record.timestamp).getTime();
                 const agentReplyTime  = lastAgentReplyAt ? new Date(lastAgentReplyAt).getTime() : 0;
@@ -415,8 +653,9 @@ if (product) {
                 if (agentAlreadyReplied) {
                   console.log(`[AI] Skipped -- agent replied after ${record.contact_number}'s message`);
                 } else {
-                  // â”€â”€ Build payload for ai_bridge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                  const aiPayload = { customer_id: record.contact_number, wa_number: record.wa_number };
+                  // ── Build payload for ai_bridge ────────────────────────
+                  const aiPayload = {};
+                  aiPayload.customer_id = record.contact_number || '';
                   if (msgType === 'image') {
                     aiPayload.message = record.message_body || '';
                     aiPayload.image   = record.media_url   || null;
@@ -428,7 +667,7 @@ if (product) {
                     aiPayload.message = record.message_body || '';
                   }
 
-                  if (aiPayload.message || aiPayload.image) {
+                  if (AI_BRIDGE_ENABLED && (aiPayload.message || aiPayload.image)) {
                     const aiResponse = await fetch('https://akchat-whatsapp-bot.onrender.com/ai', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
@@ -448,7 +687,7 @@ if (product) {
                         const toNum = String(record.contact_number).replace(/\D/g, '');
 
                         if (aiType === 'interactive' && aiButtons.length > 0) {
-                          // â”€ WhatsApp interactive reply-button message â”€
+                          // ─ WhatsApp interactive reply-button message ─
                           // Build the Cloud API "interactive" payload here so
                           // enqueueSend / messageSender receives the exact shape
                           // WhatsApp expects.
@@ -474,14 +713,47 @@ if (product) {
                           await enqueueSend({ kind: 'interactive', localMessageId: localId, accountId: account.id, to: toNum, payload: interactivePayload });
                           console.log('[AI] Sent interactive to', toNum, 'with', waButtons.length, 'buttons');
                         } else if (aiType === 'product' && aiImage) {
-                          // â”€ Product: image first, then text â”€
-                          const imgId = await insertPendingRow({ account, toNumber: toNum, messageType: 'image', messageBody: null, mediaUrl: aiImage });
-                          await enqueueSend({ kind: 'media', localMessageId: imgId, accountId: account.id, to: toNum, payload: { type: 'image', link: aiImage, caption: '' } });
+                          // ─ Product: image first, then text ─
+                          // Meta rejects any image (link OR uploaded media) over 5MB
+                          // (error 131053), and product photos are frequently larger
+                          // than that. Every AI product image is prepared (validated,
+                          // and resized/recompressed if needed) and uploaded to Meta's
+                          // /media endpoint first, then sent by media_id — never by
+                          // the raw original link — so an oversized source image can
+                          // never reach Meta directly.
+                          let imageSendFailed = false;
+                          try {
+                            const prep = await prepareProductImage(aiImage);
+                            console.log(
+                              '[AI] Product image preparation:',
+                              `source=${prep.sourceSize} bytes`,
+                              `final=${prep.finalSize} bytes`,
+                              `mime=${prep.mime}`,
+                              `compressed=${prep.compressed}`
+                            );
+                            const uploaded = await uploadMedia({
+                              accessToken: account.accessToken,
+                              phoneNumberId: account.phoneNumberId,
+                              buffer: prep.buffer,
+                              mimeType: prep.mime,
+                              filename: 'product.' + (prep.mime === 'image/png' ? 'png' : 'jpg'),
+                            });
+                            if (!uploaded || !uploaded.id) {
+                              throw new Error('Meta /media upload returned no media id');
+                            }
+                            const imgId = await insertPendingRow({ account, toNumber: toNum, messageType: 'image', messageBody: null, mediaUrl: aiImage });
+                            await enqueueSend({ kind: 'media', localMessageId: imgId, accountId: account.id, to: toNum, payload: { type: 'image', mediaId: uploaded.id, caption: '' } });
+                            console.log('[AI] Sent product image successfully to', toNum);
+                          } catch (imgErr) {
+                            imageSendFailed = true;
+                            // Log loudly — never silently skip the product image.
+                            console.error('[AI] Product image preparation/send FAILED for', toNum, ':', imgErr.message);
+                          }
                           const localId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiReply });
                           await enqueueSend({ kind: 'text', localMessageId: localId, accountId: account.id, to: toNum, payload: { body: aiReply } });
-                          console.log('[AI] Sent product to', toNum);
+                          console.log('[AI] Sent product to', toNum, imageSendFailed ? '(image failed, text sent)' : '');
                         } else {
-                          // â”€ Plain text â”€
+                          // ─ Plain text ─
                           const localId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiReply });
                           await enqueueSend({ kind: 'text', localMessageId: localId, accountId: account.id, to: toNum, payload: { body: aiReply } });
                           console.log('[AI] Replied to', toNum, ':', aiReply);
@@ -495,7 +767,7 @@ if (product) {
           } catch (aiErr) {
             console.error('[AI] Reply error:', aiErr.message);
           }
-          // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // ────────────────────────────────────────────────────
 
           await evaluateTriggers(record);
         } catch (triggerErr) {
@@ -529,14 +801,13 @@ if (product) {
   } catch (err) {
     console.error('[webhook] Error:', err.message);
     // Always return 200 to n8n so it doesn't retry infinitely. Use a static
-    // message â€” err.message can carry internal Postgres/schema details.
+    // message — err.message can carry internal Postgres/schema details.
     res.status(200).json({ ok: false, error: 'Processing error' });
   }
 });
-
 /**
  * GET /api/webhook/whatsapp
- * Meta webhook verification endpoint (for direct Meta â†’ AKchat webhooks).
+ * Meta webhook verification endpoint (for direct Meta → AKchat webhooks).
  * Not needed for n8n forwarding, but included for completeness.
  */
 router.get('/webhook/whatsapp', async (req, res) => {
@@ -563,127 +834,13 @@ router.get('/webhook/whatsapp', async (req, res) => {
       accepted = true;
     }
   }
-
   if (accepted) {
     console.log('[webhook] Meta verification accepted');
     // Echo the challenge as plain text (Meta sends a numeric token). Sending it
-    // as text/plain â€” not the res.send default of text/html â€” prevents the
+    // as text/plain — not the res.send default of text/html — prevents the
     // reflected value from being interpreted as HTML (reflected-XSS).
     return res.status(200).type('text/plain').send(String(challenge ?? ''));
   }
   res.status(403).json({ error: 'Verification failed' });
 });
-
-
-/**
- * PHASE 3: internal endpoint called by the Python AI bridge when a new
- * product matches a customer's tracked interest. Creates a DRAFT broadcast
- * for manual review â€” NEVER sends automatically. Reuses the same
- * coexistence.broadcasts table and template-sending pipeline as the real
- * Broadcast Studio, so review/approval/sending all happen through the
- * existing UI. No auth â€” internal use only.
- */
-router.post('/internal/prepare-followup', async (req, res) => {
-  try {
-    const { customer_number, template_id, name, variable_mapping } = req.body;
-    if (!customer_number || !template_id || !variable_mapping) {
-      return res.status(400).json({ error: 'customer_number, template_id, and variable_mapping are required' });
-    }
-
-    const { getSingleAccount } = require('./whatsappAccounts');
-    const account = await getSingleAccount();
-    if (!account) {
-      return res.status(500).json({ error: 'No WhatsApp Business account registered' });
-    }
-
-    const { rows } = await pool.query(
-        `INSERT INTO coexistence.broadcasts
-         (from_number, recipient_numbers, template_id, status, name, variable_mapping, message_type)
-       VALUES ($1, $2, $3, 'DRAFT', $4, $5, 'template')
-       RETURNING id`,
-      [
-        account.displayPhoneNumber,
-        JSON.stringify([{ contact_number: customer_number, name: '' }]),
-        template_id,
-        name || `Interest follow-up â€” ${customer_number}`,
-        JSON.stringify(variable_mapping),
-      ]
-    );
-
-    console.log(`[PHASE3] Draft broadcast ${rows[0].id} created for ${customer_number}, awaiting review`);
-    res.status(200).json({ status: 'draft_created', broadcastId: rows[0].id });
-  } catch (err) {
-    console.error('[prepare-followup] Error:', err.message);
-    res.status(500).json({ error: 'Failed to create draft broadcast' });
-  }
-});
-
-/**
- * PHASE 4: sends an order confirmation immediately (no draft/review step)
- * when a Shopify order is created. Unlike /internal/prepare-followup,
- * this calls enqueueSend directly — reuses the same real send pipeline
- * as Broadcast Studio (resolveAccount, insertPendingRow, enqueueSend),
- * just skips the DRAFT/manual-approval step since order confirmations
- * are expected to be instant.
- */
-router.post('/internal/send-order-confirmation', async (req, res) => {
-  console.log('[PHASE4-DEBUG] Route handler entered. Body:', JSON.stringify(req.body));
-  try {
-    const { customer_number, template_id, variable_mapping } = req.body;
-    if (!customer_number || !template_id || !variable_mapping) {
-      return res.status(400).json({ error: 'customer_number, template_id, and variable_mapping are required' });
-    }
-
-    const { getSingleAccount } = require('./whatsappAccounts');
-    const account = await getSingleAccount();
-    if (!account) {
-      return res.status(500).json({ error: 'No WhatsApp Business account registered' });
-    }
-
-    const { rows } = await pool.query(
-      `SELECT id, name, language, body FROM coexistence.message_templates WHERE id = $1 AND status = 'APPROVED'`,
-      [template_id]
-    );
-    if (rows.length === 0) {
-      return res.status(400).json({ error: 'Template not found or not approved yet' });
-    }
-    const template = rows[0];
-
-    // Body-only template — order_confirmation has no header/buttons.
-    const bodyVars = Object.keys(variable_mapping)
-      .sort((a, b) => Number(a) - Number(b))
-      .map((k) => ({ type: 'text', text: String(variable_mapping[k]) }));
-    const components = [{ type: 'body', parameters: bodyVars }];
-
-    const { insertPendingRow } = require('../services/messageSender');
-    const { enqueueSend } = require('../queue/sendQueue');
-
-    const localId = await insertPendingRow({
-      account,
-      toNumber: customer_number,
-      messageType: 'template',
-      messageBody: template.body || `Template: ${template.name}`,
-    });
-
-    await enqueueSend({
-      kind: 'template',
-      accountId: account.id,
-      to: String(customer_number).replace(/\D/g, ''),
-      localMessageId: localId,
-      payload: {
-        name: template.name,
-        languageCode: template.language || 'en',
-        components,
-      },
-    });
-
-    console.log(`[PHASE4] Order confirmation sent to ${customer_number}`);
-    res.status(200).json({ status: 'sent' });
-  } catch (err) {
-    console.error('[send-order-confirmation] Error:', err.message);
-    res.status(500).json({ error: 'Failed to send order confirmation' });
-  }
-});
 module.exports = { router };
-
-

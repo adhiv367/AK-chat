@@ -124,6 +124,64 @@ async function sendInteractive({ accessToken, phoneNumberId, to, interactive }) 
 }
 
 /**
+ * Send a WhatsApp Flow message (interactive type "flow"). Caller supplies
+ * the already-resolved Meta flow id, a per-send flow_token, and the CTA/body
+ * text — this function only assembles Meta's exact interactive-flow payload
+ * and posts it, same as sendInteractive does for buttons/lists.
+ *   flowActionPayload: { screen, data? } — only used when flowAction is
+ *   'navigate' (the default); omit entirely for 'data_exchange' flows.
+ */
+async function sendFlowMessage({
+  accessToken,
+  phoneNumberId,
+  to,
+  flowId,
+  flowToken,
+  flowCta,
+  bodyText,
+  headerText,
+  footerText,
+  flowAction = 'navigate',
+  flowActionPayload,
+}) {
+  if (!flowId) throw new Error('sendFlowMessage: flowId required');
+  if (!flowToken) throw new Error('sendFlowMessage: flowToken required');
+  if (!flowCta) throw new Error('sendFlowMessage: flowCta required');
+  if (!bodyText) throw new Error('sendFlowMessage: bodyText required');
+
+  const parameters = {
+    flow_message_version: '3',
+    flow_token: String(flowToken),
+    flow_id: String(flowId),
+    flow_cta: String(flowCta),
+    flow_action: flowAction,
+  };
+  if (flowAction === 'navigate') {
+    if (!flowActionPayload?.screen) throw new Error('sendFlowMessage: flowActionPayload.screen required for navigate action');
+    parameters.flow_action_payload = {
+      screen: flowActionPayload.screen,
+      ...(flowActionPayload.data ? { data: flowActionPayload.data } : {}),
+    };
+  }
+
+  const interactive = {
+    type: 'flow',
+    body: { text: String(bodyText) },
+    ...(headerText ? { header: { type: 'text', text: String(headerText) } } : {}),
+    ...(footerText ? { footer: { text: String(footerText) } } : {}),
+    action: { name: 'flow', parameters },
+  };
+
+  return postJson(url(phoneNumberId), accessToken, {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: String(to),
+    type: 'interactive',
+    interactive,
+  });
+}
+
+/**
  * Send a location pin. latitude/longitude required (decimal degrees, strings or
  * numbers). name/address optional (max 1000 chars each per Meta).
  */
@@ -172,5 +230,4 @@ async function sendReaction({ accessToken, phoneNumberId, to, messageId, emoji }
     reaction: { message_id: messageId, emoji: emoji || '' },
   });
 }
-
-module.exports = { sendText, sendTemplate, sendMedia, sendInteractive, sendLocation, sendContacts, sendReaction, uploadMedia };
+module.exports = { sendText, sendTemplate, sendMedia, sendInteractive, sendFlowMessage, sendLocation, sendContacts, sendReaction, uploadMedia };

@@ -6,6 +6,12 @@
 // upsertContactFromRetarget — the same bridge used by CSV/Excel import and
 // Google Sheet sync in retargetImportService.js, so manual API writes stay
 // consistent with imported ones.
+//
+// Phase 3C-4: every function takes workspaceId (from req.workspace.id,
+// resolved by the controller — never trust one supplied by the client) and
+// threads it through to the repository layer and to the Contacts bridge, so
+// a Retarget customer and its mirrored Contact both stay inside the caller's
+// own workspace.
 
 const retargetRepository = require('../repositories/retargetRepository');
 const { upsertContactFromRetarget } = require('./contactSyncService');
@@ -26,36 +32,36 @@ function normalizeInput(body = {}) {
 // Mirrors a Retarget customer into Contacts. Never throws — a Contacts sync
 // hiccup (e.g. no WhatsApp account connected yet) must not fail the
 // Retarget create/update itself; it's logged and skipped instead.
-async function syncContactSafely(retargetCustomer) {
+async function syncContactSafely(retargetCustomer, workspaceId) {
   try {
-    await upsertContactFromRetarget(retargetCustomer);
+    await upsertContactFromRetarget(retargetCustomer, workspaceId);
   } catch (err) {
     console.error('[retarget] contact sync error:', err.message);
   }
 }
 
-async function listCustomers({ search, status, category, sent, active, page, limit }) {
-  return retargetRepository.findAll({ search, status, category, sent, active, page, limit });
+async function listCustomers(workspaceId, { search, status, category, sent, active, page, limit }) {
+  return retargetRepository.findAll(workspaceId, { search, status, category, sent, active, page, limit });
 }
 
-async function getCustomer(id) {
-  return retargetRepository.findById(id);
+async function getCustomer(id, workspaceId) {
+  return retargetRepository.findById(id, workspaceId);
 }
 
-async function createCustomer(body) {
+async function createCustomer(body, workspaceId) {
   const data = normalizeInput(body);
   if (!data.phone && !data.email) {
     const err = new Error('Phone or email is required');
     err.status = 400;
     throw err;
   }
-  const customer = await retargetRepository.create(data);
-  await syncContactSafely(customer);
+  const customer = await retargetRepository.create(data, workspaceId);
+  await syncContactSafely(customer, workspaceId);
   return customer;
 }
 
-async function updateCustomer(id, body) {
-  const existing = await retargetRepository.findById(id);
+async function updateCustomer(id, body, workspaceId) {
+  const existing = await retargetRepository.findById(id, workspaceId);
   if (!existing) return null;
 
   const patch = {};
@@ -68,13 +74,13 @@ async function updateCustomer(id, body) {
   if (body.source !== undefined) patch.source = body.source?.trim() || null;
   if (body.status !== undefined) patch.status = body.status?.trim() || 'pending';
 
-  const customer = await retargetRepository.update(id, patch);
-  if (customer) await syncContactSafely(customer);
+  const customer = await retargetRepository.update(id, patch, workspaceId);
+  if (customer) await syncContactSafely(customer, workspaceId);
   return customer;
 }
 
-async function deleteCustomer(id) {
-  return retargetRepository.remove(id);
+async function deleteCustomer(id, workspaceId) {
+  return retargetRepository.remove(id, workspaceId);
 }
 
 module.exports = { listCustomers, getCustomer, createCustomer, updateCustomer, deleteCustomer };

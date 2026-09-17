@@ -5,6 +5,31 @@ const { requirePermission } = require('../middleware/access');
 const { resolveAccount, insertPendingRow } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
 
+// Phase 7.12B fix: POST /broadcasts and PUT /broadcasts/:id previously wrote
+// a client-supplied template_id / media_library_id straight into the
+// broadcasts row with no ownership check, so an authenticated user in one
+// workspace could reference another workspace's template or media item by
+// id. Mirrors the validateReferences() pattern already used by
+// routes/campaigns.js for the same fields — never trust a client-supplied
+// id without confirming it belongs to req.workspace.id (server-resolved).
+async function validateBroadcastReferences(workspaceId, { templateId, mediaLibraryId }) {
+  if (templateId) {
+    const { rows } = await pool.query(
+      'SELECT id FROM coexistence.message_templates WHERE id = $1 AND workspace_id = $2',
+      [templateId, workspaceId]
+    );
+    if (!rows.length) return 'template_id does not belong to this workspace';
+  }
+  if (mediaLibraryId) {
+    const { rows } = await pool.query(
+      'SELECT id FROM coexistence.media_library WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL',
+      [mediaLibraryId, workspaceId]
+    );
+    if (!rows.length) return 'media_library_id does not belong to this workspace';
+  }
+  return null;
+}
+
 /**
  * Extract the sorted, de-duplicated list of {{n}} variable indices from a
  * template text string (body or header). Mirrors routes/templates.js's
@@ -19,6 +44,11 @@ function resolveMergeFields(val, recipient) {
   let out = String(val == null ? '' : val);
   out = out.replace(/\{\{contact\.name\}\}/g, recipient.name || '');
   out = out.replace(/\{\{contact\.number\}\}/g, recipient.contact_number || '');
+  // Retarget module — per-recipient exit URL, pre-resolved by
+  // services/retargetUrlResolver.js and attached to the recipient object
+  // (recipient.retargetUrl) before this broadcast is enqueued. Falls back to
+  // the Invi homepage if a recipient somehow reaches here without one.
+  out = out.replace(/\{\{contact\.retargetURL\}\}/g, recipient.retargetUrl || 'https://www.invicreation.com/');
   return out;
 }
 
@@ -235,9 +265,147 @@ async function enqueueBroadcastRecipient({ broadcast, template, account, recipie
   throw new Error(`Unsupported broadcast message_type: ${msgType}`);
 }
 
+// Phase 6 Part 3C — atomic double-send guard for a whole broadcast execution.
+//
+// Investigation finding: unlike routes/campaigns.js's POST /:id/send (which
+// already row-locks the campaign and only proceeds from 'draft'/'scheduled'),
+// sendBroadcastById/executeBroadcast had NO such guard — every call
+// unconditionally set status='SENDING' and inserted a brand-new PENDING
+// broadcast_logs row + enqueued a fresh send for EVERY recipient, including
+// ones that had already succeeded. A double-click on Broadcast Studio's Send
+// button, a network retry of the POST, or the scheduler firing twice on the
+// same row would therefore resend to every recipient a second time — exactly
+// the "successful recipient gets resent" failure Part 3C Step 3/4 asks to
+// rule out. BullMQ's own attempts/backoff (queue/sendQueue.js) already
+// retries a single failed job safely and only for that one recipient; this
+// guard is the missing piece one level up — it stops a second whole-broadcast
+// execution from ever starting, using the exact same row-lock pattern
+// campaigns.js already uses. It is not a new retry system: it protects the
+// existing one from being invoked twice on the same broadcast.
+//
+// Broadcast status only ever holds DRAFT/SCHEDULED/SENDING in the DB (SENT/
+// PARTIAL/FAILED are display-only, derived at read time by
+// computeDisplayStatus) — so once a broadcast reaches SENDING it must never
+// be claimed again; there is no terminal DB status to "retry from".
+async function claimBroadcastForSending(broadcastId, workspaceId /* nullable for scheduler/background context */) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const params = workspaceId != null ? [broadcastId, workspaceId] : [broadcastId];
+    const { rows } = await client.query(
+      `SELECT status FROM coexistence.broadcasts WHERE id = $1${workspaceId != null ? ' AND workspace_id = $2' : ''} FOR UPDATE`,
+      params
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { claimed: false, reason: 'not_found' };
+    }
+    if (!['DRAFT', 'SCHEDULED'].includes(rows[0].status)) {
+      await client.query('ROLLBACK');
+      return { claimed: false, reason: 'already_sent', status: rows[0].status };
+    }
+    await client.query(
+      `UPDATE coexistence.broadcasts SET status = 'SENDING', updated_at = NOW() WHERE id = $1`,
+      [broadcastId]
+    );
+    await client.query('COMMIT');
+    return { claimed: true };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async function getBroadcastWithLogs(id) {
+// Single source of truth for turning a broadcast's raw lifecycle status +
+// its recipients' terminal outcomes into the status the UI actually shows.
+// Mirrors GET /broadcasts' SQL CASE exactly (see router.get('/broadcasts')
+// below) so the list and detail endpoints can never disagree.
+//   DRAFT/SCHEDULED        -> passthrough (recipients don't exist yet)
+//   any PENDING recipient  -> SENDING (still in flight)
+//   all recipients failed  -> FAILED
+//   some failed, some ok   -> PARTIAL
+//   all recipients ok      -> SENT
+//   no BROADCAST logs yet  -> passthrough raw status (e.g. SENDING)
+function computeDisplayStatus(rawStatus, { pending_count = 0, failed_count = 0, success_count = 0 } = {}) {
+  if (rawStatus === 'DRAFT') return 'DRAFT';
+  if (rawStatus === 'SCHEDULED') return 'SCHEDULED';
+  if (pending_count > 0) return 'SENDING';
+  if (failed_count > 0 && success_count === 0) return 'FAILED';
+  if (failed_count > 0) return 'PARTIAL';
+  if (success_count > 0) return 'SENT';
+  return rawStatus;
+}
+
+// ─── Part 3E: Delivery rollup (SENT/DELIVERED/READ/FAILED/PENDING) ─────────
+//
+// Root cause of the "recipient table shows sent/sent but Delivery shows all
+// zeroes" bug: the old rollup derived SENT/DELIVERED/READ *entirely* from a
+// `LEFT JOIN coexistence.chat_history ch ON ch.message_id = bl.wa_message_id`
+// — i.e. a recipient only counted as "sent" if a chat_history row happened to
+// exist and join cleanly. coexistence.broadcast_logs.status is the value
+// that's actually proven reliable elsewhere in this file (computeDisplayStatus,
+// the list endpoint's SQL CASE, campaigns.js's reconcileCampaignStatus all key
+// off it directly) and is exactly what the recipient table below the counters
+// already renders — so whenever a broadcast_logs row said 'sent' but its
+// chat_history join didn't resolve (missing row, replica lag, any transformation
+// that touches message_id/wa_message_id), the counters silently disagreed with
+// the table sitting right underneath them.
+//
+// Fix: broadcast_logs.status is the FLOOR for "sent" (it's already known-good —
+// see above), and chat_history is used only to layer on the more granular
+// delivered/read signal that only Meta's webhook status receipts carry (Part 3B:
+// broadcast_logs itself is never written 'delivered'/'read', only chat_history
+// is). A recipient never needs its chat_history row to resolve just to be
+// counted as "sent" once broadcast_logs already says so.
+//
+// normalizeStatus() exists because status casing is inconsistent in this schema
+// by design — broadcast_logs.status is 'PENDING' (uppercase) while every
+// terminal status ('sent'/'delivered'/'read'/'failed') is lowercase (see the
+// INSERT/UPDATE statements throughout this file and campaigns.js). Rather than
+// rewriting stored values, casing is normalized once, here, at the aggregation
+// boundary.
+function normalizeStatus(status) {
+  return typeof status === 'string' ? status.toLowerCase() : status;
+}
+
+// Pure function, exported for unit testing — takes the same `recipients` rows
+// getBroadcastWithLogs already fetches (bl.status, bl.wa_message_id) plus a
+// { [wa_message_id]: chat_history.status } map, and returns the exact shape
+// the frontend's Delivery section reads (statusRollup.{sent,delivered,read,
+// failed,pending}). No DB access — safe to call with zero recipients.
+function computeDeliveryRollup(recipients, chatStatusByMessageId = {}) {
+  let pending = 0, failed = 0, sent = 0, delivered = 0, read = 0;
+
+  for (const r of recipients || []) {
+    const blStatus = normalizeStatus(r.status);
+    const chStatus = r.wa_message_id ? normalizeStatus(chatStatusByMessageId[r.wa_message_id]) : null;
+
+    if (blStatus === 'pending') pending++;
+    if (blStatus === 'failed') failed++;
+
+    // "sent" = broadcast_logs already confirms it (or better), OR
+    // chat_history's more granular status confirms it — either signal is
+    // sufficient; neither is required to have the other.
+    if (['sent', 'delivered', 'read'].includes(blStatus) || ['sent', 'delivered', 'read'].includes(chStatus)) {
+      sent++;
+    }
+    // delivered/read can only ever come from chat_history (Part 3B: Meta's
+    // webhook status receipts are the only place these are recorded).
+    if (chStatus === 'delivered' || chStatus === 'read') delivered++;
+    if (chStatus === 'read') read++;
+  }
+
+  return { total: (recipients || []).length, pending, failed, sent, delivered, read };
+}
+
+// workspaceId is mandatory and must always come from req.workspace.id
+// (never the client) — a broadcast id from another workspace resolves as
+// "not found", not leaking its data or logs.
+async function getBroadcastWithLogs(id, workspaceId) {
   const { rows: bRows } = await pool.query(
     `SELECT b.*, t.name AS template_name, t.category AS template_category,
             t.language AS template_language, t.header_type, t.header_text,
@@ -246,28 +414,37 @@ async function getBroadcastWithLogs(id) {
             t.security_recommendation, t.code_expiry_minutes
      FROM coexistence.broadcasts b
      LEFT JOIN coexistence.message_templates t ON t.id = b.template_id
-     WHERE b.id = $1`,
-    [id]
+     WHERE b.id = $1 AND b.workspace_id = $2`,
+    [id, workspaceId]
   );
   if (bRows.length === 0) return null;
 
-  // Aggregate BROADCAST logs into a single summary entry;
-  // keep TEST logs as individual rows.
+  // Aggregate BROADCAST logs (counts only — the display-status derivation
+  // itself happens in JS below via computeDisplayStatus, so this stays in
+  // lockstep with the list endpoint's SQL CASE in GET /broadcasts instead of
+  // drifting into its own separate copy of the same logic).
   const { rows: broadcastAgg } = await pool.query(
     `SELECT
        COUNT(*)::int AS recipient_count,
        MAX(sent_at) AS sent_at,
-       CASE
-         WHEN COUNT(*) FILTER (WHERE status = 'PENDING') > 0 THEN 'PENDING'
-         WHEN COUNT(*) FILTER (WHERE status = 'failed') > 0
-          AND COUNT(*) FILTER (WHERE status IN ('sent','delivered','read')) = 0 THEN 'failed'
-         WHEN COUNT(*) FILTER (WHERE status = 'failed') > 0 THEN 'sent'
-         WHEN COUNT(*) FILTER (WHERE status IN ('sent','delivered','read')) > 0 THEN 'sent'
-         ELSE MAX(status)
-       END AS status,
+       COUNT(*) FILTER (WHERE status = 'PENDING')::int AS pending_count,
+       COUNT(*) FILTER (WHERE status = 'failed')::int AS failed_count,
+       COUNT(*) FILTER (WHERE status IN ('sent','delivered','read'))::int AS success_count,
        ARRAY_AGG(DISTINCT error_message) FILTER (WHERE error_message IS NOT NULL) AS errors
      FROM coexistence.broadcast_logs
      WHERE broadcast_id = $1 AND action = 'BROADCAST'`,
+    [id]
+  );
+
+  // Individual recipient records for a real BROADCAST — previously these
+  // were only ever collapsed into the single synthetic aggregate row below,
+  // hiding per-recipient failures from the UI. Exposed here in ADDITION to
+  // (not instead of) the aggregate row.
+  const { rows: recipients } = await pool.query(
+    `SELECT id, sent_to, status, wa_message_id, error_message, sent_at
+     FROM coexistence.broadcast_logs
+     WHERE broadcast_id = $1 AND action = 'BROADCAST'
+     ORDER BY sent_at DESC NULLS LAST, id DESC`,
     [id]
   );
 
@@ -286,38 +463,56 @@ async function getBroadcastWithLogs(id) {
   //   sent      = ever-sent (sent OR delivered OR read)
   //   delivered = ever-delivered (delivered OR read)
   //   read      = read (terminal)
-  const { rows: rollup } = await pool.query(
-    `SELECT
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE bl.status = 'PENDING')::int AS pending,
-        COUNT(*) FILTER (WHERE bl.status = 'failed')::int AS failed,
-        COUNT(*) FILTER (WHERE ch.status IN ('sent','delivered','read'))::int AS sent,
-        COUNT(*) FILTER (WHERE ch.status IN ('delivered','read'))::int AS delivered,
-        COUNT(*) FILTER (WHERE ch.status = 'read')::int AS read
-       FROM coexistence.broadcast_logs bl
-       LEFT JOIN coexistence.chat_history ch ON ch.message_id = bl.wa_message_id
-      WHERE bl.broadcast_id = $1 AND bl.action = 'BROADCAST'`,
-    [id]
-  );
+  //
+  // See computeDeliveryRollup's doc comment above for why this is no longer a
+  // single SQL join: broadcast_logs.status (already fetched into `recipients`
+  // above) is the floor for "sent", and chat_history is only consulted here —
+  // by message id, for the wa_message_ids we actually have — to layer on
+  // delivered/read. A recipient's chat_history row failing to exist/join no
+  // longer erases a "sent" that broadcast_logs already confirmed.
+  const waMessageIds = recipients.map((r) => r.wa_message_id).filter(Boolean);
+  let chatStatusByMessageId = {};
+  if (waMessageIds.length > 0) {
+    const { rows: chatRows } = await pool.query(
+      `SELECT message_id, status FROM coexistence.chat_history WHERE message_id = ANY($1)`,
+      [waMessageIds]
+    );
+    chatStatusByMessageId = Object.fromEntries(chatRows.map((c) => [c.message_id, c.status]));
+  }
+  const rollup = [computeDeliveryRollup(recipients, chatStatusByMessageId)];
+
+  const agg = broadcastAgg[0] || {};
+  const displayStatus = computeDisplayStatus(bRows[0].status, agg);
 
   // Normalise aggregated BROADCAST row to match the log shape the frontend expects
   const logs = [];
-  if (broadcastAgg[0]?.recipient_count > 0) {
+  if (agg.recipient_count > 0) {
     logs.push({
       id: `broadcast-${id}`,
       action: 'BROADCAST',
-      sent_to: `${broadcastAgg[0].recipient_count} contact${broadcastAgg[0].recipient_count !== 1 ? 's' : ''}`,
-      status: broadcastAgg[0].status,
-      sent_at: broadcastAgg[0].sent_at,
+      sent_to: `${agg.recipient_count} contact${agg.recipient_count !== 1 ? 's' : ''}`,
+      status: displayStatus,
+      sent_at: agg.sent_at,
       wa_message_id: null,
-      error_message: broadcastAgg[0].errors?.length ? broadcastAgg[0].errors.join('; ') : null,
-      _recipientCount: broadcastAgg[0].recipient_count,
+      error_message: agg.errors?.length ? agg.errors.join('; ') : null,
+      _recipientCount: agg.recipient_count,
     });
   }
   logs.push(...testLogs);
   logs.sort((a, b) => new Date(b.sent_at || 0) - new Date(a.sent_at || 0));
 
-  return { ...bRows[0], logs, statusRollup: rollup[0] || {} };
+  return {
+    ...bRows[0],
+    // The broadcast's own lifecycle status column (DRAFT/SCHEDULED/SENDING)
+    // is left untouched in the DB (see executeBroadcast/POST /:id/send — they
+    // no longer stamp a terminal SENT the moment jobs are enqueued); the
+    // *displayed* status here is derived from actual recipient outcomes,
+    // exactly like GET /broadcasts already does.
+    status: displayStatus,
+    logs,
+    recipients,
+    statusRollup: rollup[0] || {},
+  };
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -325,9 +520,16 @@ async function getBroadcastWithLogs(id) {
 // GET /broadcasts — list all with template name and live status rollup
 router.get('/broadcasts', async (req, res) => {
   try {
+    // workspaceId always comes from req.workspace (attachWorkspace, mounted
+    // globally in index.js) — never from the client. No workspace resolved
+    // for this session -> no broadcasts, never another workspace's, fail
+    // closed exactly like every other Phase 3 module.
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.json([]);
+
     const { status } = req.query;
-    const params = [];
-    const conditions = [];
+    const params = [workspaceId];
+    const statusParamIdx = status && status !== 'all' ? (params.push(status), params.length) : null;
 
     const { rows } = await pool.query(
       `WITH base AS (
@@ -339,8 +541,12 @@ router.get('/broadcasts', async (req, res) => {
                     CASE
                       WHEN b.status = 'DRAFT'     THEN 'DRAFT'
                       WHEN b.status = 'SCHEDULED' THEN 'SCHEDULED'
-                      WHEN b.status = 'SENDING'   THEN 'SENDING'
                       WHEN COUNT(*) FILTER (WHERE bl.status = 'PENDING') > 0 THEN 'SENDING'
+WHEN COUNT(*) FILTER (WHERE bl.status = 'failed') > 0
+ AND COUNT(*) FILTER (WHERE bl.status IN ('sent','delivered','read')) = 0 THEN 'FAILED'
+WHEN COUNT(*) FILTER (WHERE bl.status = 'failed') > 0 THEN 'PARTIAL'
+WHEN COUNT(*) FILTER (WHERE bl.status IN ('sent','delivered','read')) > 0 THEN 'SENT'
+WHEN b.status = 'SENDING' THEN 'SENDING'
                       WHEN COUNT(*) FILTER (WHERE bl.status = 'failed') > 0
                        AND COUNT(*) FILTER (WHERE bl.status IN ('sent','delivered','read')) = 0 THEN 'FAILED'
                       WHEN COUNT(*) FILTER (WHERE bl.status = 'failed') > 0 THEN 'PARTIAL'
@@ -352,11 +558,12 @@ router.get('/broadcasts', async (req, res) => {
                 ) AS display_status
          FROM coexistence.broadcasts b
          LEFT JOIN coexistence.message_templates t ON t.id = b.template_id
+         WHERE b.workspace_id = $1
        )
        SELECT * FROM base
-       ${status && status !== 'all' ? 'WHERE display_status = $1' : ''}
+       ${statusParamIdx ? `WHERE display_status = $${statusParamIdx}` : ''}
        ORDER BY created_at DESC`,
-      status && status !== 'all' ? [status] : []
+      params
     );
     // Map display_status over status for the frontend
     res.json(rows.map(r => ({ ...r, status: r.display_status || r.status })));
@@ -369,7 +576,9 @@ router.get('/broadcasts', async (req, res) => {
 // GET /broadcasts/:id — single broadcast with template and logs
 router.get('/broadcasts/:id', async (req, res) => {
   try {
-    const data = await getBroadcastWithLogs(req.params.id);
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(404).json({ error: 'Broadcast not found' });
+    const data = await getBroadcastWithLogs(req.params.id, workspaceId);
     if (!data) return res.status(404).json({ error: 'Broadcast not found' });
     res.json(data);
   } catch (err) {
@@ -383,6 +592,10 @@ router.get('/broadcasts/:id', async (req, res) => {
 // If scheduled_at is given and is a future time, status = 'SCHEDULED' automatically.
 router.post('/broadcasts', requirePermission('bulk-message'), async (req, res) => {
   try {
+    // workspaceId always comes from req.workspace, never the client.
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(403).json({ error: 'No workspace found for this account' });
+
     const {
       from_number, recipient_numbers, template_id, status, test_number,
       name, variable_mapping, message_type, body, url, media_library_id, caption,
@@ -403,6 +616,14 @@ router.post('/broadcasts', requirePermission('bulk-message'), async (req, res) =
     if (msgType === 'template' && !template_id) {
       return res.status(400).json({ error: 'template_id required for template broadcasts' });
     }
+
+    // Phase 7.12B fix: confirm any client-supplied template_id/media_library_id
+    // actually belongs to this workspace before it's ever written to the row.
+    const refError = await validateBroadcastReferences(workspaceId, {
+      templateId: template_id || null,
+      mediaLibraryId: media_library_id || null,
+    });
+    if (refError) return res.status(400).json({ error: refError });
 
     // Decide status and scheduled_at
     let resolvedStatus = status || 'DRAFT';
@@ -429,12 +650,13 @@ router.post('/broadcasts', requirePermission('bulk-message'), async (req, res) =
 
       const { rows } = await client.query(
         `INSERT INTO coexistence.broadcasts
-         (from_number, recipient_numbers, template_id, status, test_number, name,
+         (workspace_id, from_number, recipient_numbers, template_id, status, test_number, name,
           variable_mapping, message_type, body, url, media_library_id, caption,
           scheduled_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
          RETURNING *`,
         [
+          workspaceId,
           from_number,
           JSON.stringify(recipient_numbers || []),
           template_id || null,
@@ -454,9 +676,9 @@ router.post('/broadcasts', requirePermission('bulk-message'), async (req, res) =
 
       if (test_number) {
         await client.query(
-          `INSERT INTO coexistence.broadcast_logs (broadcast_id, action, sent_to, status)
-           VALUES ($1, $2, $3, $4)`,
-          [broadcast.id, 'TEST', test_number, 'PENDING']
+          `INSERT INTO coexistence.broadcast_logs (broadcast_id, workspace_id, action, sent_to, status)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [broadcast.id, workspaceId, 'TEST', test_number, 'PENDING']
         );
       }
 
@@ -477,8 +699,11 @@ router.post('/broadcasts', requirePermission('bulk-message'), async (req, res) =
 // PUT /broadcasts/:id — update (only if DRAFT or SCHEDULED)
 router.put('/broadcasts/:id', requirePermission('bulk-message'), async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(404).json({ error: 'Broadcast not found' });
+
     const { rows: existing } = await pool.query(
-      'SELECT status FROM coexistence.broadcasts WHERE id = $1', [req.params.id]
+      'SELECT status FROM coexistence.broadcasts WHERE id = $1 AND workspace_id = $2', [req.params.id, workspaceId]
     );
     if (existing.length === 0) return res.status(404).json({ error: 'Broadcast not found' });
     if (!['DRAFT', 'SCHEDULED'].includes(existing[0].status)) {
@@ -490,6 +715,15 @@ router.put('/broadcasts/:id', requirePermission('bulk-message'), async (req, res
       variable_mapping, message_type, body, url, media_library_id, caption,
       scheduled_at,
     } = req.body;
+
+    // Phase 7.12B fix: same ownership check as POST /broadcasts — a
+    // client-supplied template_id/media_library_id must belong to this
+    // workspace before it's written into the existing row.
+    const refError = await validateBroadcastReferences(workspaceId, {
+      templateId: template_id || null,
+      mediaLibraryId: media_library_id || null,
+    });
+    if (refError) return res.status(400).json({ error: refError });
 
     // Figure out new status and scheduled_at
     let newStatus = null;
@@ -532,7 +766,7 @@ router.put('/broadcasts/:id', requirePermission('bulk-message'), async (req, res
         status            = COALESCE($12, status),
         scheduled_at      = CASE WHEN $13 THEN $14::timestamptz ELSE scheduled_at END,
         updated_at        = NOW()
-       WHERE id = $15
+       WHERE id = $15 AND workspace_id = $16
        RETURNING *`,
       [
         from_number       || null,
@@ -550,6 +784,7 @@ router.put('/broadcasts/:id', requirePermission('bulk-message'), async (req, res
         touchScheduledAt,        // $13 — whether to overwrite scheduled_at
         newScheduledAt,          // $14 — new value (null = clear it)
         req.params.id,           // $15
+        workspaceId,              // $16
       ]
     );
     res.json(rows[0]);
@@ -562,8 +797,10 @@ router.put('/broadcasts/:id', requirePermission('bulk-message'), async (req, res
 // DELETE /broadcasts/:id
 router.delete('/broadcasts/:id', requirePermission('bulk-message'), async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(404).json({ error: 'Broadcast not found' });
     const { rowCount } = await pool.query(
-      'DELETE FROM coexistence.broadcasts WHERE id = $1', [req.params.id]
+      'DELETE FROM coexistence.broadcasts WHERE id = $1 AND workspace_id = $2', [req.params.id, workspaceId]
     );
     if (rowCount === 0) return res.status(404).json({ error: 'Broadcast not found' });
     res.json({ ok: true });
@@ -574,95 +811,121 @@ router.delete('/broadcasts/:id', requirePermission('bulk-message'), async (req, 
 });
 
 // POST /broadcasts/:id/send — real Meta send, one job per recipient via BullMQ
+// Campaign Studio Part 3A: the actual "dispatch this broadcast" logic lives
+// here, extracted verbatim from the route handler below, so that
+// routes/campaigns.js's Send Now endpoint can delegate to the EXACT same
+// send/queue/Meta pipeline instead of re-implementing any part of it.
+// Returns { statusCode, body } — never throws for expected/handled failures
+// (bad broadcast id, no account, no recipients), only for genuinely
+// unexpected errors, which callers should catch themselves.
+async function sendBroadcastById(workspaceId, broadcastId) {
+  if (!workspaceId) return { statusCode: 404, body: { error: 'Broadcast not found' } };
+
+  const { rows: bRows } = await pool.query(
+    `SELECT b.*, t.id AS t_id, t.name AS t_name, t.language AS t_language, t.body AS t_body,
+            t.header_type AS t_header_type, t.header_text AS t_header_text, t.footer AS t_footer, t.buttons AS t_buttons
+       FROM coexistence.broadcasts b
+       LEFT JOIN coexistence.message_templates t ON t.id = b.template_id
+      WHERE b.id = $1 AND b.workspace_id = $2`,
+    [broadcastId, workspaceId]
+  );
+  if (bRows.length === 0) return { statusCode: 404, body: { error: 'Broadcast not found' } };
+  const broadcast = bRows[0];
+  const template = broadcast.message_type === 'template'
+    ? { id: broadcast.t_id, name: broadcast.t_name, language: broadcast.t_language, body: broadcast.t_body,
+        header_type: broadcast.t_header_type, header_text: broadcast.t_header_text, footer: broadcast.t_footer, buttons: broadcast.t_buttons }
+    : null;
+
+  const { account, error } = await resolveAccount({ fromPhoneNumber: broadcast.from_number, workspaceId });
+  if (error) return { statusCode: 400, body: { error } };
+
+  const recipients = Array.isArray(broadcast.recipient_numbers) ? broadcast.recipient_numbers : [];
+  if (recipients.length === 0) return { statusCode: 400, body: { error: 'No recipients selected' } };
+
+  // Resolve media once for media-type broadcasts
+  let resolvedMediaId = null;
+  // Resolve the media id for media-type broadcasts AND for template broadcasts
+  // whose template has a media header (IMAGE/VIDEO/DOCUMENT) — both pull from
+  // broadcast.media_library_id.
+  const _tplHt = template ? String(template.header_type || '').toUpperCase() : '';
+  const _needsHeaderMedia = broadcast.message_type === 'template' && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(_tplHt);
+  if ((['image', 'video', 'audio', 'document'].includes(broadcast.message_type) || _needsHeaderMedia) && broadcast.media_library_id) {
+    const { syncMediaToAccount } = require('./mediaLibrary');
+    const { rows: mRows } = await pool.query(
+      `SELECT * FROM coexistence.media_library WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL`,
+      [broadcast.media_library_id, broadcast.workspace_id]
+    );
+    if (mRows.length) {
+      const media = mRows[0];
+      const { rows: sRows } = await pool.query(
+        `SELECT * FROM coexistence.media_meta_sync WHERE media_id = $1 AND account_id = $2`,
+        [media.id, account.id]
+      );
+      let sync = sRows[0];
+      const needsSync = !sync || sync.status !== 'synced' || !sync.meta_media_id || (sync.expires_at && new Date(sync.expires_at) <= new Date());
+      if (needsSync) {
+        sync = await syncMediaToAccount(media.id, account.id, broadcast.workspace_id);
+        sync = {
+          meta_media_id: sync.metaMediaId,
+          expires_at: sync.expiresAt,
+          status: sync.status,
+        };
+      }
+      resolvedMediaId = sync.meta_media_id;
+    }
+  }
+
+  // Atomically claim this broadcast: only a row currently DRAFT/SCHEDULED can
+  // start sending, and the claim (row lock + status flip) happens as one
+  // transaction — see claimBroadcastForSending's doc comment above. A second
+  // concurrent/duplicate call (double-click, retried POST) sees status
+  // already SENDING and is rejected before any recipient is touched, so
+  // already-succeeded recipients from the first call can never be resent.
+  const claim = await claimBroadcastForSending(broadcastId, workspaceId);
+  if (!claim.claimed) {
+    if (claim.reason === 'not_found') return { statusCode: 404, body: { error: 'Broadcast not found' } };
+    // already_sent — return the current state instead of erroring; the
+    // caller (e.g. a duplicate POST) gets the real, already-in-progress
+    // broadcast back rather than a confusing failure.
+    const data = await getBroadcastWithLogs(broadcastId, workspaceId);
+    return { statusCode: 200, body: { ...data, enqueued: 0, alreadySent: true } };
+  }
+
+  let enqueued = 0;
+  for (const r of recipients) {
+    const recipient = typeof r === 'string' ? { contact_number: r, name: '' } : r;
+    const { rows: logRows } = await pool.query(
+      `INSERT INTO coexistence.broadcast_logs (broadcast_id, workspace_id, action, sent_to, status)
+       VALUES ($1, $2, 'BROADCAST', $3, 'PENDING') RETURNING id`,
+      [broadcastId, workspaceId, recipient.contact_number]
+    );
+    try {
+      await enqueueBroadcastRecipient({
+        broadcast, template, account, recipient, broadcastLogId: logRows[0].id, resolvedMediaId,
+      });
+      enqueued++;
+    } catch (jobErr) {
+      await pool.query(
+        `UPDATE coexistence.broadcast_logs SET status='failed', error_message=$1 WHERE id=$2`,
+        [jobErr.message.slice(0, 500), logRows[0].id]
+      );
+    }
+  }
+
+  // NOTE: the broadcast intentionally stays 'SENDING' here — do not stamp
+  // a terminal SENT just because jobs were enqueued (see requirement A).
+  // getBroadcastWithLogs() below derives the real display status from
+  // each recipient's terminal outcome once their jobs actually complete.
+
+  const data = await getBroadcastWithLogs(broadcastId, workspaceId);
+  return { statusCode: 200, body: { ...data, enqueued } };
+}
+
 router.post('/broadcasts/:id/send', requirePermission('bulk-message'), async (req, res) => {
   try {
-    const { rows: bRows } = await pool.query(
-      `SELECT b.*, t.id AS t_id, t.name AS t_name, t.language AS t_language, t.body AS t_body,
-              t.header_type AS t_header_type, t.header_text AS t_header_text, t.footer AS t_footer, t.buttons AS t_buttons
-         FROM coexistence.broadcasts b
-         LEFT JOIN coexistence.message_templates t ON t.id = b.template_id
-        WHERE b.id = $1`,
-      [req.params.id]
-    );
-    if (bRows.length === 0) return res.status(404).json({ error: 'Broadcast not found' });
-    const broadcast = bRows[0];
-    const template = broadcast.message_type === 'template'
-      ? { id: broadcast.t_id, name: broadcast.t_name, language: broadcast.t_language, body: broadcast.t_body,
-          header_type: broadcast.t_header_type, header_text: broadcast.t_header_text, footer: broadcast.t_footer, buttons: broadcast.t_buttons }
-      : null;
-
-    const { account, error } = await resolveAccount({ fromPhoneNumber: broadcast.from_number });
-    if (error) return res.status(400).json({ error });
-
-    const recipients = Array.isArray(broadcast.recipient_numbers) ? broadcast.recipient_numbers : [];
-    if (recipients.length === 0) return res.status(400).json({ error: 'No recipients selected' });
-
-    // Resolve media once for media-type broadcasts
-    let resolvedMediaId = null;
-    // Resolve the media id for media-type broadcasts AND for template broadcasts
-    // whose template has a media header (IMAGE/VIDEO/DOCUMENT) — both pull from
-    // broadcast.media_library_id.
-    const _tplHt = template ? String(template.header_type || '').toUpperCase() : '';
-    const _needsHeaderMedia = broadcast.message_type === 'template' && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(_tplHt);
-    if ((['image', 'video', 'audio', 'document'].includes(broadcast.message_type) || _needsHeaderMedia) && broadcast.media_library_id) {
-      const { syncMediaToAccount } = require('./mediaLibrary');
-      const { rows: mRows } = await pool.query(
-        `SELECT * FROM coexistence.media_library WHERE id = $1 AND deleted_at IS NULL`,
-        [broadcast.media_library_id]
-      );
-      if (mRows.length) {
-        const media = mRows[0];
-        const { rows: sRows } = await pool.query(
-          `SELECT * FROM coexistence.media_meta_sync WHERE media_id = $1 AND account_id = $2`,
-          [media.id, account.id]
-        );
-        let sync = sRows[0];
-        const needsSync = !sync || sync.status !== 'synced' || !sync.meta_media_id || (sync.expires_at && new Date(sync.expires_at) <= new Date());
-        if (needsSync) {
-          sync = await syncMediaToAccount(media.id, account.id);
-          sync = {
-            meta_media_id: sync.metaMediaId,
-            expires_at: sync.expiresAt,
-            status: sync.status,
-          };
-        }
-        resolvedMediaId = sync.meta_media_id;
-      }
-    }
-
-    await pool.query(
-      `UPDATE coexistence.broadcasts SET status = 'SENDING', updated_at = NOW() WHERE id = $1`,
-      [req.params.id]
-    );
-
-    let enqueued = 0;
-    for (const r of recipients) {
-      const recipient = typeof r === 'string' ? { contact_number: r, name: '' } : r;
-      const { rows: logRows } = await pool.query(
-        `INSERT INTO coexistence.broadcast_logs (broadcast_id, action, sent_to, status)
-         VALUES ($1, 'BROADCAST', $2, 'PENDING') RETURNING id`,
-        [req.params.id, recipient.contact_number]
-      );
-      try {
-        await enqueueBroadcastRecipient({
-          broadcast, template, account, recipient, broadcastLogId: logRows[0].id, resolvedMediaId,
-        });
-        enqueued++;
-      } catch (jobErr) {
-        await pool.query(
-          `UPDATE coexistence.broadcast_logs SET status='failed', error_message=$1 WHERE id=$2`,
-          [jobErr.message.slice(0, 500), logRows[0].id]
-        );
-      }
-    }
-
-    await pool.query(
-      `UPDATE coexistence.broadcasts SET status = 'SENT', updated_at = NOW() WHERE id = $1`,
-      [req.params.id]
-    );
-
-    const data = await getBroadcastWithLogs(req.params.id);
-    res.json({ ...data, enqueued });
+    const workspaceId = req.workspace?.id ?? null;
+    const { statusCode, body } = await sendBroadcastById(workspaceId, req.params.id);
+    res.status(statusCode).json(body);
   } catch (err) {
     console.error('[broadcasts] POST /broadcasts/:id/send error:', err.message);
     res.status(500).json({ error: 'Failed to send broadcast' });
@@ -672,6 +935,9 @@ router.post('/broadcasts/:id/send', requirePermission('bulk-message'), async (re
 // POST /broadcasts/:id/test — real Meta send to a single test number
 router.post('/broadcasts/:id/test', requirePermission('bulk-message'), async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(404).json({ error: 'Broadcast not found' });
+
     const { test_number } = req.body;
     if (!test_number) return res.status(400).json({ error: 'test_number required' });
 
@@ -680,8 +946,8 @@ router.post('/broadcasts/:id/test', requirePermission('bulk-message'), async (re
               t.header_type AS t_header_type, t.header_text AS t_header_text, t.footer AS t_footer, t.buttons AS t_buttons
          FROM coexistence.broadcasts b
          LEFT JOIN coexistence.message_templates t ON t.id = b.template_id
-        WHERE b.id = $1`,
-      [req.params.id]
+        WHERE b.id = $1 AND b.workspace_id = $2`,
+      [req.params.id, workspaceId]
     );
     if (bRows.length === 0) return res.status(404).json({ error: 'Broadcast not found' });
     const broadcast = bRows[0];
@@ -690,7 +956,7 @@ router.post('/broadcasts/:id/test', requirePermission('bulk-message'), async (re
           header_type: broadcast.t_header_type, header_text: broadcast.t_header_text, footer: broadcast.t_footer, buttons: broadcast.t_buttons }
       : null;
 
-    const { account, error } = await resolveAccount({ fromPhoneNumber: broadcast.from_number });
+    const { account, error } = await resolveAccount({ fromPhoneNumber: broadcast.from_number, workspaceId: req.workspace?.id });
     if (error) return res.status(400).json({ error });
 
     // Resolve media once for media-type broadcasts
@@ -703,8 +969,8 @@ router.post('/broadcasts/:id/test', requirePermission('bulk-message'), async (re
     if ((['image', 'video', 'audio', 'document'].includes(broadcast.message_type) || _needsHeaderMedia) && broadcast.media_library_id) {
       const { syncMediaToAccount } = require('./mediaLibrary');
       const { rows: mRows } = await pool.query(
-        `SELECT * FROM coexistence.media_library WHERE id = $1 AND deleted_at IS NULL`,
-        [broadcast.media_library_id]
+        `SELECT * FROM coexistence.media_library WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL`,
+        [broadcast.media_library_id, broadcast.workspace_id]
       );
       if (mRows.length) {
         const media = mRows[0];
@@ -715,7 +981,7 @@ router.post('/broadcasts/:id/test', requirePermission('bulk-message'), async (re
         let sync = sRows[0];
         const needsSync = !sync || sync.status !== 'synced' || !sync.meta_media_id || (sync.expires_at && new Date(sync.expires_at) <= new Date());
         if (needsSync) {
-          sync = await syncMediaToAccount(media.id, account.id);
+          sync = await syncMediaToAccount(media.id, account.id, broadcast.workspace_id);
           sync = {
             meta_media_id: sync.metaMediaId,
             expires_at: sync.expiresAt,
@@ -727,9 +993,9 @@ router.post('/broadcasts/:id/test', requirePermission('bulk-message'), async (re
     }
 
     const { rows: logRows } = await pool.query(
-      `INSERT INTO coexistence.broadcast_logs (broadcast_id, action, sent_to, status)
-       VALUES ($1, 'TEST', $2, 'PENDING') RETURNING id`,
-      [req.params.id, test_number]
+      `INSERT INTO coexistence.broadcast_logs (broadcast_id, workspace_id, action, sent_to, status)
+       VALUES ($1, $2, 'TEST', $3, 'PENDING') RETURNING id`,
+      [req.params.id, workspaceId, test_number]
     );
 
     await enqueueBroadcastRecipient({
@@ -744,7 +1010,7 @@ router.post('/broadcasts/:id/test', requirePermission('bulk-message'), async (re
       [test_number, req.params.id]
     );
 
-    const data = await getBroadcastWithLogs(req.params.id);
+    const data = await getBroadcastWithLogs(req.params.id, workspaceId);
     res.json(data);
   } catch (err) {
     console.error('[broadcasts] POST /broadcasts/:id/test error:', err.message);
@@ -755,12 +1021,14 @@ router.post('/broadcasts/:id/test', requirePermission('bulk-message'), async (re
 // POST /broadcasts/:id/cancel-schedule — cancel a SCHEDULED broadcast, put it back to DRAFT
 router.post('/broadcasts/:id/cancel-schedule', requirePermission('bulk-message'), async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(404).json({ error: 'Broadcast not found or not in SCHEDULED status' });
     const { rows } = await pool.query(
       `UPDATE coexistence.broadcasts
           SET status = 'DRAFT', scheduled_at = NULL, updated_at = NOW()
-        WHERE id = $1 AND status = 'SCHEDULED'
+        WHERE id = $1 AND status = 'SCHEDULED' AND workspace_id = $2
         RETURNING *`,
-      [req.params.id]
+      [req.params.id, workspaceId]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Broadcast not found or not in SCHEDULED status' });
@@ -803,7 +1071,14 @@ async function executeBroadcast(broadcastId) {
       }
     : null;
 
-  const { account, error } = await resolveAccount({ fromPhoneNumber: broadcast.from_number });
+  // Background/scheduler context — no req here, so workspace is derived
+  // strictly from the stored broadcast row itself (broadcast.workspace_id,
+  // Phase 3F-1B), never from a request. This scopes the account resolution
+  // (including its "default account" fallback) to that broadcast's own
+  // workspace, so a scheduled broadcast can never resolve or send from
+  // another workspace's WhatsApp account even if a from_number happened to
+  // collide across workspaces.
+  const { account, error } = await resolveAccount({ fromPhoneNumber: broadcast.from_number, workspaceId: broadcast.workspace_id });
   if (error) throw new Error(`Account resolve error: ${error}`);
 
   const recipients = Array.isArray(broadcast.recipient_numbers) ? broadcast.recipient_numbers : [];
@@ -816,8 +1091,8 @@ async function executeBroadcast(broadcastId) {
   if ((['image', 'video', 'audio', 'document'].includes(broadcast.message_type) || _needsHeaderMedia) && broadcast.media_library_id) {
     const { syncMediaToAccount } = require('./mediaLibrary');
     const { rows: mRows } = await pool.query(
-      `SELECT * FROM coexistence.media_library WHERE id = $1 AND deleted_at IS NULL`,
-      [broadcast.media_library_id]
+      `SELECT * FROM coexistence.media_library WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL`,
+      [broadcast.media_library_id, broadcast.workspace_id]
     );
     if (mRows.length) {
       const media = mRows[0];
@@ -829,13 +1104,25 @@ async function executeBroadcast(broadcastId) {
       const needsSync = !sync || sync.status !== 'synced' || !sync.meta_media_id ||
         (sync.expires_at && new Date(sync.expires_at) <= new Date());
       if (needsSync) {
-        sync = await syncMediaToAccount(media.id, account.id);
+        sync = await syncMediaToAccount(media.id, account.id, broadcast.workspace_id);
         sync = { meta_media_id: sync.metaMediaId, expires_at: sync.expiresAt, status: sync.status };
       }
       resolvedMediaId = sync.meta_media_id;
     }
   }
 
+  // NOTE: unlike sendBroadcastById below, this function deliberately does
+  // NOT call claimBroadcastForSending. Its one caller, broadcastScheduler.js's
+  // runSchedulerTick, already performs its own atomic claim first — it
+  // SELECTs due rows with FOR UPDATE SKIP LOCKED, flips them to 'SENDING'
+  // while still holding that lock, and only then (after releasing the lock)
+  // calls executeBroadcast — see runSchedulerTick's "Immediately mark all of
+  // them as SENDING while we still hold the lock" step. By the time
+  // executeBroadcast runs here the row is therefore already 'SENDING', so a
+  // second claim attempt would always find it non-DRAFT/SCHEDULED and
+  // wrongly reject the scheduler's own legitimate, already-claimed fire.
+  // SKIP LOCKED + the immediate status flip is that pathway's full
+  // duplicate-fire protection; adding a second one would just conflict.
   await pool.query(
     `UPDATE coexistence.broadcasts SET status = 'SENDING', updated_at = NOW() WHERE id = $1`,
     [broadcastId]
@@ -845,9 +1132,9 @@ async function executeBroadcast(broadcastId) {
   for (const r of recipients) {
     const recipient = typeof r === 'string' ? { contact_number: r, name: '' } : r;
     const { rows: logRows } = await pool.query(
-      `INSERT INTO coexistence.broadcast_logs (broadcast_id, action, sent_to, status)
-       VALUES ($1, 'BROADCAST', $2, 'PENDING') RETURNING id`,
-      [broadcastId, recipient.contact_number]
+      `INSERT INTO coexistence.broadcast_logs (broadcast_id, workspace_id, action, sent_to, status)
+       VALUES ($1, $2, 'BROADCAST', $3, 'PENDING') RETURNING id`,
+      [broadcastId, broadcast.workspace_id, recipient.contact_number]
     );
     try {
       await enqueueBroadcastRecipient({
@@ -863,13 +1150,20 @@ async function executeBroadcast(broadcastId) {
     }
   }
 
-  await pool.query(
-    `UPDATE coexistence.broadcasts SET status = 'SENT', updated_at = NOW() WHERE id = $1`,
-    [broadcastId]
-  );
+  // NOTE: intentionally no terminal SENT stamp here — see requirement A.
+  // The broadcast remains 'SENDING' until recipient jobs reach terminal
+  // states; getBroadcastWithLogs()/GET /broadcasts derive the real display
+  // status (SENT/PARTIAL/FAILED) from broadcast_logs at read time.
 
   console.log(`[broadcasts] executeBroadcast ${broadcastId} complete — ${enqueued} enqueued`);
   return enqueued;
 }
 
-module.exports = { router, executeBroadcast };
+module.exports = {
+  router, executeBroadcast, getBroadcastWithLogs, computeDisplayStatus, computeDeliveryRollup, sendBroadcastById,
+  // Phase 7C — Sequence scheduler reuses this exact template-component
+  // builder (rather than duplicating Meta payload-construction logic) so a
+  // sequence message step and a broadcast recipient are built identically.
+  // Pure function, no behavior change; purely an additive export.
+  buildTemplateComponents,
+};

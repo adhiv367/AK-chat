@@ -8,6 +8,7 @@ import Sidebar from './components/Sidebar.jsx';
 import ChatsPage from './components/ChatsPage.jsx';
 import HomePage from './pages/HomePage.jsx';
 import ChatbotBuilderPage from './pages/ChatbotBuilderPage.jsx';
+import AiAgentBuilderPage from './pages/AiAgentBuilderPage.jsx';
 import TemplateBuilderPage from './pages/TemplateBuilderPage.jsx';
 import ContactsPage from './pages/ContactsPage.jsx';
 import BulkMessagePage from './pages/BulkMessagePage.jsx';
@@ -46,8 +47,8 @@ function EmailComingSoon({ title }) {
 }
 
 const VALID_PAGES = new Set([
-  'home', 'chatbot-builder', 'template-builder', 'chats',
-  'contacts', 'pipelines', 'retarget', 'lead-intelligence', 'bulk-message', 'target-message', 'admin-settings', 'media-library',
+  'home', 'chatbot-builder', 'ai-agent-builder', 'template-builder', 'chats',
+  'contacts', 'pipelines', 'retarget', 'lead-intelligence', 'bulk-message', 'target-message', 'admin-settings',      'media-library',
   'ig-inbox', 'ig-contacts', 'ig-templates', 'ig-campaigns', 'ig-workflow', 'ig-analytics', 'ig-settings', 'ig-accounts',
   'email-dashboard', 'email-campaigns', 'email-inbox', 'email-contacts', 'email-templates', 'email-settings',
 ]);
@@ -135,6 +136,7 @@ export default function App() {
       case 'bulk-message': return <BulkMessagePage />;
       case 'target-message': return <TargetMessagePage />;
       case 'chatbot-builder': return <ChatbotBuilderPage subParts={subParts} navigate={navigate} />;
+      case 'ai-agent-builder': return <AiAgentBuilderPage user={user} />;
 
       case 'admin-settings': return <AdminSettingsPage onLogout={handleLogout} onNavigate={setPage} subParts={subParts} navigate={navigate} user={user} />;
 

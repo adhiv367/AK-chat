@@ -147,6 +147,10 @@ export const api = {
     send: (id) => req(`/broadcasts/${id}/send`, { method: 'POST' }),
     test: (id, testNumber) => req(`/broadcasts/${id}/test`, { method: 'POST', body: JSON.stringify({ test_number: testNumber }) }),
   },
+   workspaces: {
+    getAiProfile: (id) => req(`/workspaces/${id}/ai-profile`),
+    updateAiProfile: (id, data) => req(`/workspaces/${id}/ai-profile`, { method: 'PUT', body: JSON.stringify(data) }),
+  },
   chatbots: {
     list: () => req('/chatbots'),
     get: (id) => req(`/chatbots/${id}`),

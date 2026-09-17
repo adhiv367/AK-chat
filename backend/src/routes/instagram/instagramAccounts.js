@@ -5,21 +5,42 @@ const oauth = require('../../services/instagramOAuthService');
 const accountService = require('../../services/instagramAccountService');
 const webhookService = require('../../services/instagramWebhookService');
 
-const pendingStates = new Map(); // state -> timestamp, swept below
+// req.workspace is attached by attachWorkspace (mounted ahead of this router
+// in index.js, after authMiddleware) — never trust a workspace id supplied
+// by the client for any route below.
+function currentWorkspaceId(req) {
+  return req.workspace?.id ?? null;
+}
 
-function newState() {
+const pendingStates = new Map(); // state -> { timestamp, workspaceId }, swept below
+
+function newState(workspaceId) {
   const state = crypto.randomBytes(16).toString('hex');
-  pendingStates.set(state, Date.now());
+  pendingStates.set(state, { timestamp: Date.now(), workspaceId });
   return state;
 }
 function consumeState(state) {
-  const ok = pendingStates.has(state) && (Date.now() - pendingStates.get(state) < 10 * 60 * 1000);
+  const entry = pendingStates.get(state);
   pendingStates.delete(state);
-  return ok;
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp >= 10 * 60 * 1000) return null;
+  return entry.workspaceId;
 }
 
+// NOTE: these two routes ('/instagram/oauth/start' and '/instagram/oauth/callback')
+// are currently shadowed at runtime by the dedicated, publicly-mounted
+// routes/instagram/instagramOAuth.js (see index.js — that router is
+// registered on '/api/instagram/oauth' *before* this one, and Express takes
+// the first middleware that responds). They're kept working and
+// workspace-scoped anyway rather than left as a dead, unscoped path that
+// could silently start creating workspace-less accounts if the mount order
+// ever changes.
 router.get('/instagram/oauth/start', (req, res) => {
-  res.redirect(oauth.getAuthUrl(newState()));
+  const workspaceId = currentWorkspaceId(req);
+  if (!workspaceId) {
+    return res.status(409).json({ error: 'No workspace found for this account. Please contact support.' });
+  }
+  res.redirect(oauth.getAuthUrl(newState(workspaceId)));
 });
 
 router.get('/instagram/oauth/callback', async (req, res) => {
@@ -27,7 +48,8 @@ router.get('/instagram/oauth/callback', async (req, res) => {
   try {
     const { code, state, error } = req.query;
     if (error) return res.redirect(`${frontendBase}/#/ig-accounts?error=${encodeURIComponent(error)}`);
-    if (!consumeState(state)) return res.redirect(`${frontendBase}/#/ig-accounts?error=invalid_state`);
+    const workspaceId = consumeState(state);
+    if (!workspaceId) return res.redirect(`${frontendBase}/#/ig-accounts?error=invalid_state`);
 
     const shortToken = await oauth.exchangeCodeForToken(code);
     const long = await oauth.getLongLivedToken(shortToken);
@@ -52,6 +74,7 @@ router.get('/instagram/oauth/callback', async (req, res) => {
         accessToken: page.access_token,
         expiresAt,
         profilePicture: profile.profile_picture_url,
+        workspaceId,
       });
 
       try {
@@ -69,9 +92,12 @@ router.get('/instagram/oauth/callback', async (req, res) => {
   }
 });
 
+// List accounts for the current workspace only.
 router.get('/instagram/accounts', async (req, res) => {
   try {
-    res.json(await accountService.listAccounts());
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.json([]);
+    res.json(await accountService.listAccounts(workspaceId));
   } catch (err) {
     console.error('[instagram/accounts] list error:', err.message);
     res.status(500).json({ error: 'Failed to list Instagram accounts' });
@@ -80,11 +106,13 @@ router.get('/instagram/accounts', async (req, res) => {
 
 router.post('/instagram/accounts/:id/disconnect', async (req, res) => {
   try {
-    const acc = await accountService.getAccountRow(req.params.id);
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.status(404).json({ error: 'Not found' });
+    const acc = await accountService.getAccountRow(req.params.id, workspaceId);
     if (!acc) return res.status(404).json({ error: 'Not found' });
     const { decrypt } = require('../../util/crypto');
     await webhookService.unsubscribePage(acc.facebook_page_id, decrypt(acc.access_token_encrypted));
-    await accountService.disconnectAccount(req.params.id);
+    await accountService.disconnectAccount(req.params.id, workspaceId);
     res.json({ ok: true });
   } catch (err) {
     console.error('[instagram/accounts] disconnect error:', err.message);
@@ -94,9 +122,13 @@ router.post('/instagram/accounts/:id/disconnect', async (req, res) => {
 
 router.post('/instagram/accounts/:id/refresh-token', async (req, res) => {
   try {
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.status(404).json({ error: 'Not found' });
+    const acc = await accountService.getAccountRow(req.params.id, workspaceId);
+    if (!acc) return res.status(404).json({ error: 'Not found' });
     const { refreshIfNeeded } = require('../../services/instagramTokenService');
     await refreshIfNeeded(req.params.id);
-    res.json(await accountService.publicShape(await accountService.getAccountRow(req.params.id)));
+    res.json(await accountService.publicShape(await accountService.getAccountRow(req.params.id, workspaceId)));
   } catch (err) {
     console.error('[instagram/accounts] refresh error:', err.message);
     res.status(500).json({ error: 'Failed to refresh token' });
@@ -105,7 +137,10 @@ router.post('/instagram/accounts/:id/refresh-token', async (req, res) => {
 
 router.delete('/instagram/accounts/:id', async (req, res) => {
   try {
-    await accountService.deleteAccount(req.params.id);
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.status(404).json({ error: 'Not found' });
+    const ok = await accountService.deleteAccount(req.params.id, workspaceId);
+    if (!ok) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   } catch (err) {
     console.error('[instagram/accounts] delete error:', err.message);

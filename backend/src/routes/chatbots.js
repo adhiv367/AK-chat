@@ -3,6 +3,16 @@ const router = express.Router();
 const pool = require('../db');
 const { requirePermission } = require('../middleware/access');
 
+// Resolve the current request's workspace id. Every customer-facing route in
+// this file must scope by this — never trust a workspace_id from the client
+// (the request body is never read for it). Returns null if the authenticated
+// user has no workspace yet (shouldn't happen post-Phase-1-backfill, but
+// fail closed — empty results / 409 — rather than leak another workspace's
+// automations). Mirrors routes/whatsappAccounts.js currentWorkspaceId().
+function currentWorkspaceId(req) {
+  return req.workspace?.id ?? null;
+}
+
 /**
  * Automations are linear keyword→message flows: one Keyword Trigger followed by
  * a straight chain of Send Message nodes. This collapses any saved config to
@@ -54,13 +64,26 @@ function sanitizeToLinear(config) {
   return { ...config, nodes: keepNodes, edges: newEdges };
 }
 
-// GET /chatbots — list all
-router.get('/chatbots', async (req, res) => {
+// GET /chatbots — list all, scoped to the current workspace only.
+// Phase 7.13B fix (7.13A-3): the frontend (Sidebar.jsx/App.jsx) already
+// gates the entire Automations page — list, detail, and executions — behind
+// the 'chatbot-builder' permission, and every mutating route in this file
+// already requires it. These GET routes were the one gap: any authenticated
+// workspace member (including a role without 'chatbot-builder', e.g.
+// VIEWER/AGENT — see permissions.js's VIEWER_PAGES/AGENT lists) could still
+// read full automation configs and execution history directly via the API.
+// Adding the same requirePermission('chatbot-builder') gate routes/flows.js
+// already uses for its equivalent GET routes — no new permission key.
+router.get('/chatbots', requirePermission('chatbot-builder'), async (req, res) => {
   try {
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.json([]);
     const { rows } = await pool.query(
       `SELECT id, name, description, status, trigger_type, config, created_at, updated_at
        FROM coexistence.chatbots
-       ORDER BY updated_at DESC`
+       WHERE workspace_id = $1
+       ORDER BY updated_at DESC`,
+      [workspaceId]
     );
     res.json(rows);
   } catch (err) {
@@ -69,13 +92,16 @@ router.get('/chatbots', async (req, res) => {
   }
 });
 
-// GET /chatbots/:id — single chatbot
-router.get('/chatbots/:id', async (req, res) => {
+// GET /chatbots/:id — single chatbot, scoped to the current workspace. A
+// chatbot belonging to another workspace looks identical to a missing one.
+router.get('/chatbots/:id', requirePermission('chatbot-builder'), async (req, res) => {
   try {
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.status(404).json({ error: 'Chatbot not found' });
     const { rows } = await pool.query(
       `SELECT id, name, description, status, trigger_type, config, created_at, updated_at
-       FROM coexistence.chatbots WHERE id = $1`,
-      [req.params.id]
+       FROM coexistence.chatbots WHERE id = $1 AND workspace_id = $2`,
+      [req.params.id, workspaceId]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Chatbot not found' });
     res.json(rows[0]);
@@ -85,18 +111,24 @@ router.get('/chatbots/:id', async (req, res) => {
   }
 });
 
-// POST /chatbots — create
+// POST /chatbots — create. workspace_id is always taken from req.workspace
+// (server-resolved from the authenticated user's membership) — any
+// workspace_id in req.body is ignored, never trusted from the frontend.
 router.post('/chatbots', requirePermission('chatbot-builder'), async (req, res) => {
   try {
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) {
+      return res.status(409).json({ error: 'No workspace found for this account. Please contact support.' });
+    }
     const { name, description, status, trigger_type, config } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Name is required' });
     }
     const { rows } = await pool.query(
-      `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config)
-       VALUES ($1,$2,$3,$4,$5)
+      `INSERT INTO coexistence.chatbots (workspace_id, name, description, status, trigger_type, config)
+       VALUES ($1,$2,$3,$4,$5,$6)
        RETURNING *`,
-      [name.trim(), description || null, status || 'draft', trigger_type || 'keyword', JSON.stringify(sanitizeToLinear(config) || {})]
+      [workspaceId, name.trim(), description || null, status || 'draft', trigger_type || 'keyword', JSON.stringify(sanitizeToLinear(config) || {})]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -105,9 +137,13 @@ router.post('/chatbots', requirePermission('chatbot-builder'), async (req, res) 
   }
 });
 
-// PUT /chatbots/:id — update
+// PUT /chatbots/:id — update. Scoped by id AND workspace_id so a request
+// can never edit another workspace's automation, and workspace_id itself is
+// never part of what's writable from the request body.
 router.put('/chatbots/:id', requirePermission('chatbot-builder'), async (req, res) => {
   try {
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.status(404).json({ error: 'Chatbot not found' });
     const { name, description, status, trigger_type, config } = req.body;
     if (name !== undefined && !name.trim()) {
       return res.status(400).json({ error: 'Name is required' });
@@ -120,9 +156,9 @@ router.put('/chatbots/:id', requirePermission('chatbot-builder'), async (req, re
         trigger_type = COALESCE($4, trigger_type),
         config = COALESCE($5, config),
         updated_at = NOW()
-       WHERE id = $6
+       WHERE id = $6 AND workspace_id = $7
        RETURNING *`,
-      [name ? name.trim() : null, description, status, trigger_type, config ? JSON.stringify(sanitizeToLinear(config)) : null, req.params.id]
+      [name ? name.trim() : null, description, status, trigger_type, config ? JSON.stringify(sanitizeToLinear(config)) : null, req.params.id, workspaceId]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Chatbot not found' });
     res.json(rows[0]);
@@ -132,21 +168,25 @@ router.put('/chatbots/:id', requirePermission('chatbot-builder'), async (req, re
   }
 });
 
-// POST /chatbots/:id/duplicate — clone an automation. The copy is always
-// created DISABLED ('inactive') so it can't fire until reviewed/enabled.
+// POST /chatbots/:id/duplicate — clone an automation within the current
+// workspace only. The copy is always created DISABLED ('inactive') so it
+// can't fire until reviewed/enabled, and always inherits the source's
+// workspace_id (never the client's).
 router.post('/chatbots/:id/duplicate', requirePermission('chatbot-builder'), async (req, res) => {
   try {
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.status(404).json({ error: 'Chatbot not found' });
     const { rows: src } = await pool.query(
-      'SELECT name, description, trigger_type, config FROM coexistence.chatbots WHERE id = $1',
-      [req.params.id]
+      'SELECT name, description, trigger_type, config FROM coexistence.chatbots WHERE id = $1 AND workspace_id = $2',
+      [req.params.id, workspaceId]
     );
     if (src.length === 0) return res.status(404).json({ error: 'Chatbot not found' });
     const c = src[0];
     const { rows } = await pool.query(
-      `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config)
-       VALUES ($1,$2,'inactive',$3,$4)
+      `INSERT INTO coexistence.chatbots (workspace_id, name, description, status, trigger_type, config)
+       VALUES ($1,$2,$3,'inactive',$4,$5)
        RETURNING id, name, description, status, trigger_type, config, created_at, updated_at`,
-      [`${c.name} (copy)`, c.description, c.trigger_type, JSON.stringify(c.config || {})]
+      [workspaceId, `${c.name} (copy)`, c.description, c.trigger_type, JSON.stringify(c.config || {})]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -155,11 +195,13 @@ router.post('/chatbots/:id/duplicate', requirePermission('chatbot-builder'), asy
   }
 });
 
-// DELETE /chatbots/:id
+// DELETE /chatbots/:id — scoped to the current workspace only.
 router.delete('/chatbots/:id', requirePermission('chatbot-builder'), async (req, res) => {
   try {
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.status(404).json({ error: 'Chatbot not found' });
     const { rowCount } = await pool.query(
-      'DELETE FROM coexistence.chatbots WHERE id = $1', [req.params.id]
+      'DELETE FROM coexistence.chatbots WHERE id = $1 AND workspace_id = $2', [req.params.id, workspaceId]
     );
     if (rowCount === 0) return res.status(404).json({ error: 'Chatbot not found' });
     res.json({ ok: true });
@@ -169,10 +211,22 @@ router.delete('/chatbots/:id', requirePermission('chatbot-builder'), async (req,
   }
 });
 
-// GET /chatbots/:id/executions — paginated list of executions for an automation
-router.get('/chatbots/:id/executions', async (req, res) => {
+// GET /chatbots/:id/executions — paginated list of executions for an
+// automation. Scoped to the current workspace: the automation itself must
+// belong to req.workspace, or this looks like a 404 (never leaks another
+// workspace's execution history).
+router.get('/chatbots/:id/executions', requirePermission('chatbot-builder'), async (req, res) => {
   try {
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.status(404).json({ error: 'Automation not found' });
+
     const automationId = req.params.id;
+    const { rows: ownerRows } = await pool.query(
+      'SELECT id FROM coexistence.chatbots WHERE id = $1 AND workspace_id = $2',
+      [automationId, workspaceId]
+    );
+    if (ownerRows.length === 0) return res.status(404).json({ error: 'Automation not found' });
+
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const offset = (page - 1) * limit;
@@ -249,15 +303,21 @@ router.get('/chatbots/:id/executions', async (req, res) => {
   }
 });
 
-// GET /executions/:id — single execution with all steps
-router.get('/executions/:id', async (req, res) => {
+// GET /executions/:id — single execution with all steps. Scoped to the
+// current workspace via the owning chatbot's workspace_id — an execution
+// whose automation belongs to another workspace looks like a 404.
+router.get('/executions/:id', requirePermission('chatbot-builder'), async (req, res) => {
   try {
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.status(404).json({ error: 'Execution not found' });
+
     const { rows: execRows } = await pool.query(
-      `SELECT id, automation_id, status, trigger_type, trigger_data, contact_number,
-              started_at, completed_at, error_message, created_at
-       FROM coexistence.automation_executions
-       WHERE id = $1`,
-      [req.params.id]
+      `SELECT e.id, e.automation_id, e.status, e.trigger_type, e.trigger_data, e.contact_number,
+              e.started_at, e.completed_at, e.error_message, e.created_at
+       FROM coexistence.automation_executions e
+       JOIN coexistence.chatbots c ON c.id = e.automation_id
+       WHERE e.id = $1 AND c.workspace_id = $2`,
+      [req.params.id, workspaceId]
     );
     if (execRows.length === 0) return res.status(404).json({ error: 'Execution not found' });
 
@@ -277,19 +337,28 @@ router.get('/executions/:id', async (req, res) => {
   }
 });
 
-// POST /executions/:id/cancel — stop a non-terminal execution. A cancelled
-// 'paused' execution will no longer resume when the customer replies (the
-// webhook resume only claims rows WHERE status='paused').
+// POST /executions/:id/cancel — stop a non-terminal execution. Scoped to the
+// current workspace via the owning chatbot's workspace_id, so a request can
+// never cancel another workspace's execution. A cancelled 'paused' execution
+// will no longer resume when the customer replies (the webhook resume only
+// claims rows WHERE status='paused').
 router.post('/executions/:id/cancel', requirePermission('chatbot-builder'), async (req, res) => {
   try {
+    const workspaceId = currentWorkspaceId(req);
+    if (!workspaceId) return res.status(404).json({ error: 'Execution not found' });
+
     const { rows } = await pool.query(
-      `UPDATE coexistence.automation_executions
+      `UPDATE coexistence.automation_executions e
           SET status = 'cancelled',
               completed_at = NOW(),
-              error_message = COALESCE(error_message, 'Cancelled by user')
-        WHERE id = $1 AND status IN ('running', 'paused', 'queued')
-        RETURNING *`,
-      [req.params.id]
+              error_message = COALESCE(e.error_message, 'Cancelled by user')
+        FROM coexistence.chatbots c
+        WHERE e.id = $1
+          AND e.status IN ('running', 'paused', 'queued')
+          AND c.id = e.automation_id
+          AND c.workspace_id = $2
+        RETURNING e.*`,
+      [req.params.id, workspaceId]
     );
     if (rows.length === 0) {
       return res.status(409).json({ error: 'Execution is already finished — nothing to stop.' });

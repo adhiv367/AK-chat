@@ -9,6 +9,26 @@ const { isAutomationBlocked, SKIP_REASON } = require('../services/automationGuar
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
+// Workspace isolation for background execution: never trust any workspace
+// id from a caller — the only source of truth here is the WhatsApp account
+// the inbound record actually arrived on (record.phone_number_id / its
+// wa_number), resolved fresh from coexistence.whatsapp_accounts, which was
+// itself tagged with workspace_id server-side (see db/whatsappAccountsSchema.js).
+// Returns null if the account can't be resolved to a workspace (e.g. a
+// pre-migration account not yet backfilled) — callers must treat null as
+// "cannot verify" and skip rather than fire, to fail closed.
+async function resolveWorkspaceIdForRecord(client, record) {
+  if (!record) return null;
+  const { rows } = await client.query(
+    `SELECT workspace_id FROM coexistence.whatsapp_accounts
+      WHERE ($1::text IS NOT NULL AND phone_number_id = $1)
+         OR ($2::text IS NOT NULL AND display_phone_number = $2)
+      LIMIT 1`,
+    [record.phone_number_id || null, record.wa_number || null]
+  );
+  return rows[0]?.workspace_id ?? null;
+}
+
 function normalizeText(text) {
   return (text || '').toLowerCase().trim();
 }
@@ -154,13 +174,32 @@ function evaluateConditions(node, context) {
 // ─── Step Logger ─────────────────────────────────────────────────────
 
 async function logStep(client, executionId, node, input, output, status, errorMessage, waMessageId, waMessageStatus) {
+  // workspace_id is NOT NULL on this table. Rather than thread it through
+  // every one of this function's ~24 call sites (every node handler already
+  // has it on `context`/`runContext`, but that's easy to miss on a future
+  // call site and would silently reopen this bug), we derive it here from
+  // the parent automation_executions row via executionId. That row's
+  // workspace_id is always already populated by the time any step for it is
+  // logged (executeAutomation() inserts it before walkFrom() ever runs, and
+  // resumeAutomation() only ever operates on an existing execution) — see
+  // the workspace_id fix in executeAutomation()/logSkippedExecution() above.
+  // This keeps automation_execution_steps.workspace_id in lockstep with its
+  // parent execution's workspace_id with a single source of truth, and
+  // guarantees no call site can ever regress to inserting NULL.
+  const { rows: execRows } = await client.query(
+    `SELECT workspace_id FROM coexistence.automation_executions WHERE id = $1`,
+    [executionId]
+  );
+  const workspaceId = execRows[0]?.workspace_id ?? null;
+
   const { rows } = await client.query(
     `INSERT INTO coexistence.automation_execution_steps
-     (execution_id, node_id, node_type, node_name, input_data, output_data, status, completed_at, error_message, wa_message_id, wa_message_status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     (execution_id, workspace_id, node_id, node_type, node_name, input_data, output_data, status, completed_at, error_message, wa_message_id, wa_message_status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING *`,
     [
       executionId,
+      workspaceId,
       node.id,
       node.type,
       node.title || node.name || `${node.type} node`,
@@ -315,6 +354,7 @@ async function executeMessageNode(client, executionId, node, context) {
     // third-party endpoint and log the response on the execution step.
     // No chat_history row is created and the send queue is not involved.
     if (directType === 'dynamic_api') {
+      const { safeFetch } = require('../util/ssrfGuard');
       const endpoint = resolveVariables(dd.endpoint, context);
       if (!endpoint || !/^https?:\/\//i.test(endpoint)) {
         throw new Error('automation dynamic_api: endpoint URL must start with http:// or https://');
@@ -369,7 +409,7 @@ async function executeMessageNode(client, executionId, node, context) {
       let respJson = null;
       let httpErr = null;
       try {
-        const res = await fetch(endpoint, {
+        const res = await safeFetch(endpoint, {
           method,
           headers: parsedHeaders,
           body: requestBody,
@@ -404,6 +444,249 @@ async function executeMessageNode(client, executionId, node, context) {
         return logStep(client, executionId, node, { directType: 'dynamic_api' }, apiOutput, 'error', httpErr || `HTTP ${httpStatus}`);
       }
       return logStep(client, executionId, node, { directType: 'dynamic_api' }, apiOutput, 'success');
+    }
+
+    // AI Reply: ask Gemini (via aiReplyService) for a reply to the inbound
+    // message and send it as a normal text message through the existing
+    // send infrastructure. On any AI failure (missing key, timeout, empty
+    // response, quota error), fall back to a configured WhatsApp template —
+    // scoped to this automation's own workspace — instead of failing the
+    // whole automation. Mirrors the dynamic_api branch above: this returns
+    // early via logStep rather than falling into the generic direct-message
+    // code below.
+    if (directType === 'ai_reply') {
+      const { generateReply } = require('../services/aiReplyService');
+      const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+      const { enqueueSend } = require('../queue/sendQueue');
+      const fromPhone = context.trigger_data?.wa_number;
+      const { account, error: accErr } = await resolveAccount({
+        accountId: node.whatsappAccountId,
+        fromPhoneNumber: fromPhone,
+      });
+      if (accErr || !account) {
+        throw new Error(`automation ai_reply: ${accErr || 'no account for ' + (node.whatsappAccountId || fromPhone)}`);
+      }
+
+      // Everything handed to aiReplyService here already comes from
+      // context, which automationEngine resolved server-side for THIS
+      // workspace only (see resolveWorkspaceIdForRecord / the contact
+      // lookup that populates context.contact) — no additional lookups are
+      // performed here, so there is no way for this call to reach into
+      // another workspace's data.
+       const { getWorkspaceAiProfile } = require('../db/workspaceAiProfileSchema');
+       const businessProfile = await getWorkspaceAiProfile(context.workspace_id);
+
+      const { reply, error: aiError } = await generateReply({
+        customerMessage: context.message_body,
+        contactName: context.contact?.name || context.contact?.profile_name,
+        goal: dd.aiGoal,
+        instructions: dd.aiInstructions,
+        businessProfile,
+        model: dd.aiModel,
+      });
+
+      if (reply) {
+        const resolvedReplyBody = reply;
+        const localId = await insertPendingRow({
+          account, toNumber: context.contact_number, messageType: 'text', messageBody: resolvedReplyBody,
+        });
+        await enqueueSend({
+          kind: 'text',
+          accountId: account.id,
+          to: String(context.contact_number).replace(/\D/g, ''),
+          localMessageId: localId,
+          payload: { body: resolvedReplyBody, previewUrl: /https?:\/\/\S+/i.test(resolvedReplyBody) },
+        });
+        const output = {
+          mode: 'direct', directType: 'ai_reply', aiReply: resolvedReplyBody, note: 'AI reply generated and enqueued',
+          whatsapp: { message_id: localId, from: fromPhone, to: context.contact_number, message_type: 'text', status: 'sending', timestamp: new Date().toISOString() },
+        };
+        return logStep(client, executionId, node, { directType: 'ai_reply' }, output, 'success');
+      }
+
+      // AI failed — try the configured fallback template, scoped to this
+      // automation's own workspace only (never trust a bare templateId
+      // across workspaces: the WHERE clause below always re-checks
+      // workspace_id = context.workspace_id, the same server-resolved value
+      // used everywhere else in this function).
+      const fallbackTemplateId = dd.fallbackTemplateId || null;
+      if (fallbackTemplateId && context.workspace_id) {
+        const { rows: tplRows } = await client.query(
+          `SELECT name, body, category, language, buttons, header_type, header_text, footer
+             FROM coexistence.message_templates
+            WHERE id = $1 AND workspace_id = $2`,
+          [fallbackTemplateId, context.workspace_id]
+        ).catch(() => ({ rows: [] }));
+        const template = tplRows[0] || null;
+
+        if (template) {
+          const localId = await insertPendingRow({
+            account, toNumber: context.contact_number, messageType: 'template',
+            messageBody: template.body || `Template: ${template.name}`,
+            templateMeta: {
+              header_type: template.header_type || 'NONE',
+              header_text: template.header_text || null,
+              footer: template.footer || null,
+              buttons: Array.isArray(template.buttons) ? template.buttons : (template.buttons || []),
+            },
+          });
+          await enqueueSend({
+            kind: 'template',
+            accountId: account.id,
+            to: String(context.contact_number).replace(/\D/g, ''),
+            localMessageId: localId,
+            payload: { name: template.name, languageCode: template.language || 'en', components: [] },
+          });
+          const output = {
+            mode: 'direct', directType: 'ai_reply', aiError, fallbackTemplateId, fallbackTemplateName: template.name,
+            note: 'AI reply failed — sent fallback template instead',
+            whatsapp: { message_id: localId, from: fromPhone, to: context.contact_number, message_type: 'template', status: 'sending', timestamp: new Date().toISOString() },
+          };
+          return logStep(client, executionId, node, { directType: 'ai_reply' }, output, 'success');
+        }
+
+        // Configured fallback template id didn't resolve for this workspace
+        // (wrong id, deleted, or belongs to another workspace) — fail
+        // gracefully rather than silently sending nothing.
+        return logStep(
+          client, executionId, node, { directType: 'ai_reply' },
+          { mode: 'direct', directType: 'ai_reply', aiError, fallbackTemplateId, note: 'AI reply failed and fallback template could not be resolved for this workspace' },
+          'error', aiError || 'AI reply failed and fallback template unavailable'
+        );
+      }
+
+      // No fallback configured — fail this step without throwing, so the
+      // automation worker stays healthy and the execution is simply marked
+      // as an error on this node (consistent with dynamic_api's onError
+      // behavior above).
+      return logStep(
+        client, executionId, node, { directType: 'ai_reply' },
+        { mode: 'direct', directType: 'ai_reply', aiError, note: 'AI reply failed and no fallback template configured' },
+        'error', aiError || 'AI reply failed'
+      );
+    }
+
+    // Subflow: run another automation belonging to the SAME workspace,
+    // reusing the existing executeAutomation() lifecycle rather than a
+    // second engine. Mirrors the ai_reply/dynamic_api branches above: this
+    // returns early via logStep rather than falling into the generic
+    // direct-message code below, since it isn't a WhatsApp send.
+    if (directType === 'subflow') {
+      const MAX_SUBFLOW_DEPTH = 5;
+      const targetId = dd.targetAutomationId ? String(dd.targetAutomationId) : null;
+      const waitMode = dd.waitMode || 'await';
+      const chain = Array.isArray(context.__subflowChain) ? context.__subflowChain : [];
+      const workspaceId = context.workspace_id;
+      const baseOutput = { directType: 'subflow', targetAutomationId: targetId, waitMode, chain };
+
+      if (!targetId) {
+        return logStep(
+          client, executionId, node, { directType: 'subflow' },
+          { ...baseOutput, note: 'No target automation configured' },
+          'error', 'Subflow: no target automation selected'
+        );
+      }
+
+      if (!workspaceId) {
+        return logStep(
+          client, executionId, node, { directType: 'subflow' },
+          { ...baseOutput, note: 'Workspace could not be resolved' },
+          'error', 'Subflow: workspace could not be resolved for this execution'
+        );
+      }
+
+      // Recursion guard: never re-enter an automation already running
+      // anywhere in this chain (covers direct self-triggering A -> A as well
+      // as longer cycles like A -> B -> A). This is checked BEFORE the depth
+      // cap so a 2-cycle is reported as a loop, not a generic depth error.
+      if (chain.map(String).includes(targetId)) {
+        return logStep(
+          client, executionId, node, { directType: 'subflow' },
+          { ...baseOutput, note: 'Blocked — target automation is already running in this chain' },
+          'error', `Subflow: recursive loop detected (automation ${targetId} already running in chain: ${chain.join(' -> ')})`
+        );
+      }
+
+      if (chain.length >= MAX_SUBFLOW_DEPTH) {
+        return logStep(
+          client, executionId, node, { directType: 'subflow' },
+          { ...baseOutput, note: `Blocked — max subflow depth (${MAX_SUBFLOW_DEPTH}) reached` },
+          'error', `Subflow: max subflow depth (${MAX_SUBFLOW_DEPTH}) exceeded (chain: ${chain.join(' -> ')})`
+        );
+      }
+
+      // Workspace-scoped lookup — workspaceId is context.workspace_id, which
+      // is resolved server-side in evaluateTriggers() from the inbound
+      // message's own WhatsApp account (see resolveWorkspaceIdForRecord).
+      // Never derived from the client, the node config, or the target id
+      // itself — this is what makes it impossible for one workspace's
+      // automation to reach into another workspace's automation by id.
+      const { rows: targetRows } = await client.query(
+        `SELECT id, name, status, config FROM coexistence.chatbots WHERE id = $1 AND workspace_id = $2`,
+        [targetId, workspaceId]
+      ).catch(() => ({ rows: [] }));
+      const target = targetRows[0] || null;
+
+      if (!target) {
+        return logStep(
+          client, executionId, node, { directType: 'subflow' },
+          { ...baseOutput, note: 'Target automation not found in this workspace' },
+          'error', 'Subflow: target automation not found (it may not exist, or it belongs to another workspace)'
+        );
+      }
+
+      if (target.status !== 'active') {
+        return logStep(
+          client, executionId, node, { directType: 'subflow' },
+          { ...baseOutput, targetName: target.name, note: 'Target automation is not active' },
+          'error', `Subflow: target automation "${target.name}" is not active (status: ${target.status})`
+        );
+      }
+
+      // executeAutomation() catches its own internal errors and records them
+      // on the CHILD's own execution row (never throws for an ordinary
+      // in-automation failure) — the try/catch here is only for a genuinely
+      // unexpected error (e.g. a DB error creating the child execution row).
+      // `context` (not a fresh clone) is passed through: executeAutomation()
+      // itself builds the child's runContext with this automation's id
+      // appended to __subflowChain, so the child — and anything IT triggers —
+      // sees the accurate, growing chain.
+      try {
+        const childExecution = await executeAutomation(client, target, context);
+        if (!childExecution) {
+          return logStep(
+            client, executionId, node, { directType: 'subflow' },
+            { ...baseOutput, targetName: target.name, note: 'Target automation has no nodes to execute' },
+            'error', `Subflow: target automation "${target.name}" has no nodes configured`
+          );
+        }
+        const { rows: statusRows } = await client.query(
+          `SELECT status, error_message FROM coexistence.automation_executions WHERE id = $1`,
+          [childExecution.id]
+        );
+        const childStatus = statusRows[0]?.status || 'unknown';
+        const childError = statusRows[0]?.error_message || null;
+        const output = {
+          ...baseOutput, targetName: target.name,
+          childExecutionId: childExecution.id, childStatus,
+          note: childStatus === 'error'
+            ? 'Subflow ran but the target automation failed — see its own execution log'
+            : 'Subflow executed successfully',
+        };
+        const step = await logStep(
+          client, executionId, node, { directType: 'subflow' }, output,
+          childStatus === 'error' ? 'error' : 'success',
+          childStatus === 'error' ? (childError || 'Subflow target automation failed') : undefined
+        );
+        if (waitMode === 'handoff' && step) step.__stopExecution = true;
+        return step;
+      } catch (err) {
+        return logStep(
+          client, executionId, node, { directType: 'subflow' },
+          { ...baseOutput, targetName: target.name, error: err.message },
+          'error', `Subflow: unexpected error executing target automation — ${err.message}`
+        );
+      }
     }
 
     // Direct (free-form) message — only allowed inside 24h window. We don't
@@ -575,35 +858,62 @@ async function executeMessageNode(client, executionId, node, context) {
       kind = 'contacts';
       payload = { contacts: [contactCard] };
     } else if (directType === 'product') {
-      const catalogId = String(resolveVariables(dd.catalog_id, context) || '').trim();
-      const productId = String(resolveVariables(dd.product_retailer_id, context) || '').trim();
-      if (!catalogId || !productId) {
-        throw new Error('automation product: catalog_id and product_retailer_id are required');
+      // Phase 7.6 — payload construction extracted, unchanged, into
+      // services/whatsappProductMessage.js so the Automation Builder path
+      // and the Chat "send product" path build the identical Meta
+      // `product` interactive shape instead of two independently
+      // maintained copies.
+      //
+      // Phase 7.9 Batch 2 — the builder no longer stores free-text
+      // catalog_id/product_retailer_id (those were client-supplied
+      // strings, i.e. an untrusted catalog_id). It now stores
+      // `productId`, the workspace product's INTERNAL id picked via
+      // AutomationBuilderView.jsx's ProductPicker, the exact same shape
+      // routes/messages.js's POST /messages/send-product already trusts.
+      // Resolution mirrors that route exactly: the product is looked up
+      // scoped to context.workspace_id (never trusted from node config),
+      // and the Meta catalog id is resolved server-side only, scoped to
+      // this workspace + this automation's resolved WhatsApp account —
+      // never read from stored node data.
+      const { resolveProductForMessage, resolveCatalogForAccount, resolveRetailerId, buildProductInteractive } = require('../services/whatsappProductMessage');
+      const workspaceId = context.workspace_id;
+      if (!workspaceId) {
+        throw new Error('automation product: no workspace context for product lookup');
       }
+      const storedProductId = dd.productId;
+      if (!storedProductId) {
+        throw new Error('automation product: no product selected on this node');
+      }
+      const product = await resolveProductForMessage(workspaceId, { id: storedProductId });
+      const catalogId = await resolveCatalogForAccount(workspaceId, account.id);
+      const productRetailerId = resolveRetailerId(product);
       kind = 'interactive';
-      const interactive = {
-        type: 'product',
-        body: resolvedBody ? { text: resolvedBody.slice(0, 1024) } : undefined,
-        action: { catalog_id: catalogId, product_retailer_id: productId },
-      };
-      // Meta tolerates missing body for single-product but it's recommended; drop if empty
-      if (!interactive.body) delete interactive.body;
-      payload = { interactive };
+      payload = { interactive: buildProductInteractive({ catalogId, productRetailerId, bodyText: resolvedBody }) };
     } else if (directType === 'catalog') {
-      const catalogId = String(resolveVariables(dd.catalog_id, context) || '').trim();
-      if (!resolvedBody || !resolvedBody.trim()) {
-        throw new Error('automation catalog: body text is required by Meta');
+      // Phase 7.6 — same extraction as the 'product' branch above.
+      //
+      // Phase 7.9 Batch 2 — mirrors routes/messages.js's POST
+      // /messages/send-catalog exactly: resolveCatalogForAccount is
+      // still called (fail fast if no Meta catalog is connected for this
+      // account) but its return value is validation-only and never
+      // placed in the payload, same as that route's own comment on this.
+      // The optional thumbnail is now `dd.thumbnailProductId` (an
+      // internal product id from ProductPicker's catalog mode), resolved
+      // workspace-scoped the same way — never a raw catalog_id typed
+      // into the builder.
+      const { resolveProductForMessage, resolveCatalogForAccount, resolveRetailerId, buildCatalogInteractive } = require('../services/whatsappProductMessage');
+      const workspaceId = context.workspace_id;
+      if (!workspaceId) {
+        throw new Error('automation catalog: no workspace context for catalog lookup');
+      }
+      await resolveCatalogForAccount(workspaceId, account.id);
+      let thumbnailRetailerId;
+      if (dd.thumbnailProductId) {
+        const thumbnailProduct = await resolveProductForMessage(workspaceId, { id: dd.thumbnailProductId });
+        thumbnailRetailerId = resolveRetailerId(thumbnailProduct);
       }
       kind = 'interactive';
-      const interactive = {
-        type: 'catalog_message',
-        body: { text: resolvedBody.slice(0, 1024) },
-        action: { name: 'catalog_message' },
-      };
-      if (catalogId) {
-        interactive.action.parameters = { thumbnail_product_retailer_id: catalogId };
-      }
-      payload = { interactive };
+      payload = { interactive: buildCatalogInteractive({ catalogId: thumbnailRetailerId, bodyText: resolvedBody }) };
     } else if (directType === 'link') {
       // Link message = text with preview_url enabled. We append the URL to
       // the body if the body doesn't already contain it, so WhatsApp can
@@ -921,9 +1231,14 @@ async function executeActionNode(client, executionId, node, context) {
         const rawVal    = ix >= 0 ? raw.slice(ix + 1).trim() : '';
         if (!fieldName) { results.push({ ...base, status: 'error', error: 'no field selected' }); stepStatus = 'error'; continue; }
         if (!waNumber || !contactNumber) { results.push({ ...base, status: 'error', error: 'context missing wa_number or contact_number' }); stepStatus = 'error'; continue; }
+        // Phase 6: scoped to context.workspace_id (server-resolved by the
+        // caller — evaluateTriggers/resumeAutomation — never client-supplied).
+        // No workspace context means we cannot safely resolve the field, so
+        // fail closed rather than matching another workspace's field by name.
+        if (!context.workspace_id) { results.push({ ...base, status: 'error', error: 'no workspace context for field lookup' }); stepStatus = 'error'; continue; }
         const { rows: fRows } = await client.query(
-          `SELECT id, name FROM coexistence.contact_field_definitions WHERE LOWER(name) = LOWER($1) LIMIT 1`,
-          [fieldName]
+          `SELECT id, name FROM coexistence.contact_field_definitions WHERE LOWER(name) = LOWER($1) AND workspace_id = $2 LIMIT 1`,
+          [fieldName, context.workspace_id]
         );
         if (fRows.length === 0) { results.push({ ...base, status: 'error', error: `custom field "${fieldName}" not found` }); stepStatus = 'error'; continue; }
         const fieldId = fRows[0].id;
@@ -950,9 +1265,11 @@ async function executeActionNode(client, executionId, node, context) {
         const fieldName = String(a.value || '').trim();
         if (!fieldName) { results.push({ ...base, status: 'error', error: 'no field selected' }); stepStatus = 'error'; continue; }
         if (!waNumber || !contactNumber) { results.push({ ...base, status: 'error', error: 'context missing wa_number or contact_number' }); stepStatus = 'error'; continue; }
+        // Phase 6: same workspace scoping/fail-closed rule as Set Custom Field above.
+        if (!context.workspace_id) { results.push({ ...base, status: 'error', error: 'no workspace context for field lookup' }); stepStatus = 'error'; continue; }
         const { rows: fRows } = await client.query(
-          `SELECT id, name FROM coexistence.contact_field_definitions WHERE LOWER(name) = LOWER($1) LIMIT 1`,
-          [fieldName]
+          `SELECT id, name FROM coexistence.contact_field_definitions WHERE LOWER(name) = LOWER($1) AND workspace_id = $2 LIMIT 1`,
+          [fieldName, context.workspace_id]
         );
         if (fRows.length === 0) { results.push({ ...base, status: 'error', error: `custom field "${fieldName}" not found` }); stepStatus = 'error'; continue; }
         const fieldId = fRows[0].id;
@@ -1046,11 +1363,12 @@ async function logSkippedExecution(client, automation, context, reason) {
   try {
     const { rows } = await client.query(
       `INSERT INTO coexistence.automation_executions
-       (automation_id, status, trigger_type, trigger_data, contact_number, started_at, completed_at, error_message)
-       VALUES ($1,$2,$3,$4,$5,$6,$6,$7)
+       (automation_id, workspace_id, status, trigger_type, trigger_data, contact_number, started_at, completed_at, error_message)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8)
        RETURNING *`,
       [
         automation.id,
+        context.workspace_id || null,
         'skipped',
         context.trigger_type || 'keyword',
         JSON.stringify(context.trigger_data || {}),
@@ -1076,18 +1394,32 @@ async function executeAutomation(client, automation, context) {
     return null;
   }
 
+  // Subflow recursion tracking: __subflowChain holds the ids of every
+  // automation currently executing in this call stack (root first). This is
+  // built fresh here as `runContext` rather than mutated onto the caller's
+  // `context` object, because evaluateTriggers() reuses the SAME context
+  // object across every automation it tests in its for-loop — mutating it in
+  // place would leak one automation's subflow chain into its unrelated
+  // siblings. `runContext` (and only it) is threaded down through the
+  // trigger/message handlers for THIS automation's own execution, so a
+  // subflow node reading context.__subflowChain always sees the accurate
+  // chain including itself, with no cross-contamination between runs.
+  const parentChain = Array.isArray(context.__subflowChain) ? context.__subflowChain : [];
+  const runContext = { ...context, __subflowChain: [...parentChain, automation.id] };
+
   // Create execution record
   const { rows } = await client.query(
     `INSERT INTO coexistence.automation_executions
-     (automation_id, status, trigger_type, trigger_data, contact_number, started_at)
-     VALUES ($1,$2,$3,$4,$5,$6)
+     (automation_id, workspace_id, status, trigger_type, trigger_data, contact_number, started_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
      RETURNING *`,
     [
       automation.id,
+      runContext.workspace_id || null,
       'running',
-      context.trigger_type || 'keyword',
-      JSON.stringify(context.trigger_data || {}),
-      context.contact_number || null,
+      runContext.trigger_type || 'keyword',
+      JSON.stringify(runContext.trigger_data || {}),
+      runContext.contact_number || null,
       new Date().toISOString(),
     ]
   );
@@ -1101,14 +1433,14 @@ async function executeAutomation(client, automation, context) {
     }
 
     // Execute trigger
-    await executeTriggerNode(client, execution.id, triggerNode, context);
+    await executeTriggerNode(client, execution.id, triggerNode, runContext);
 
     // Walk graph starting from nodes connected to trigger
     const triggerEdges = edges.filter(e => e.from === triggerNode.id);
     const startNodeId = triggerEdges.length > 0 ? triggerEdges[0].to : null;
     const visited = new Set([triggerNode.id]);
 
-    const result = await walkFrom(client, execution.id, nodes, edges, startNodeId, context, visited);
+    const result = await walkFrom(client, execution.id, nodes, edges, startNodeId, runContext, visited);
 
     if (!result.paused) {
       await updateExecutionStatus(client, execution.id, 'success');
@@ -1140,6 +1472,13 @@ async function walkFrom(client, executionId, nodes, edges, startNodeId, context,
       // the handler already flipped the execution row to status='paused'.
       if (step && step.__pauseExecution) {
         return { paused: true };
+      }
+      // A subflow node configured to "end this flow" (waitMode: 'handoff')
+      // signals __stopExecution: stop walking further nodes but still finish
+      // as 'success' (unlike __pauseExecution, this is not waiting on
+      // anything — it's just done).
+      if (step && step.__stopExecution) {
+        break;
       }
     } else {
       // Legacy / unsupported node type (condition, delay, action, etc.).
@@ -1182,13 +1521,35 @@ async function resumeAutomation(client, executionId, record) {
 
   // Load the latest automation config
   const { rows: botRows } = await client.query(
-    `SELECT id, name, config FROM coexistence.chatbots WHERE id = $1`,
+    `SELECT id, name, config, workspace_id FROM coexistence.chatbots WHERE id = $1`,
     [execRow.automation_id]
   );
   if (botRows.length === 0) {
     await updateExecutionStatus(client, executionId, 'error', 'Automation no longer exists');
     return null;
   }
+
+  // Workspace isolation: verify the automation being resumed actually
+  // belongs to the same workspace as the WhatsApp account the reply arrived
+  // on. Both are resolved from stored data (chatbots.workspace_id and
+  // whatsapp_accounts.workspace_id) — never from the caller. A mismatch
+  // means the paused execution and the inbound record disagree on
+  // workspace, which should never happen in normal operation; refuse to
+  // resume rather than risk one workspace's reply driving another
+  // workspace's automation.
+  const recordWorkspaceId = await resolveWorkspaceIdForRecord(client, record);
+  if (!recordWorkspaceId || String(recordWorkspaceId) !== String(botRows[0].workspace_id)) {
+    console.error(`[engine] resumeAutomation: workspace mismatch for execution=${executionId} automation=${execRow.automation_id} (automation workspace=${botRows[0].workspace_id}, record workspace=${recordWorkspaceId}) — refusing to resume`);
+    await updateExecutionStatus(client, executionId, 'error', 'Workspace mismatch — resume refused');
+    return null;
+  }
+  // Phase 6: carried on context so every downstream node handler (in
+  // particular executeActionNode's Set/Clear Custom Field lookups) can scope
+  // coexistence.contact_field_definitions to this workspace instead of
+  // querying it globally. Sourced from the same server-resolved value just
+  // verified above — never from the client.
+  const workspaceIdForContext = recordWorkspaceId;
+
   const config = botRows[0].config || {};
   const nodes = config.nodes || [];
   const edges = config.edges || [];
@@ -1199,6 +1560,7 @@ async function resumeAutomation(client, executionId, record) {
     message_body: record.message_body,
     message_type: record.message_type,
     trigger_type: 'resume',
+    workspace_id: workspaceIdForContext,
     trigger_data: {
       message_id: record.message_id,
       wa_number: record.wa_number,
@@ -1246,9 +1608,13 @@ async function resumeAutomation(client, executionId, record) {
   }
 
   // Field definitions let resolveVariables map custom_fields (id-keyed) back to
-  // their {{normalized_name}} tokens.
+  // their {{normalized_name}} tokens. Phase 6: scoped to this execution's
+  // workspace (see workspaceIdForContext above) — never global.
   try {
-    const { rows: fdRows } = await client.query(`SELECT id, name FROM coexistence.contact_field_definitions`);
+    const { rows: fdRows } = await client.query(
+      `SELECT id, name FROM coexistence.contact_field_definitions WHERE workspace_id = $1`,
+      [workspaceIdForContext]
+    );
     context.field_defs = fdRows;
   } catch (e) { context.field_defs = []; }
 
@@ -1304,19 +1670,31 @@ async function resumeAutomation(client, executionId, record) {
     return execRow;
   }
 }
-
 // ─── Trigger Evaluation ──────────────────────────────────────────────
-
 async function evaluateTriggers(messageRecord) {
   const client = await pool.connect();
   const executions = [];
 
   try {
-    // Fetch all active automations
+    // Resolve the workspace that owns the WhatsApp account this message
+    // arrived on. This is the ONLY source of workspace truth for background
+    // execution — resolved from stored account data, never from any
+    // caller-supplied value. If it can't be resolved, fail closed: run no
+    // automations for this message rather than risk cross-workspace firing.
+    const workspaceId = await resolveWorkspaceIdForRecord(client, messageRecord);
+    if (!workspaceId) {
+      console.warn(`[engine] evaluateTriggers: could not resolve workspace for wa_number=${messageRecord.wa_number} phone_number_id=${messageRecord.phone_number_id}; skipping trigger evaluation`);
+      return executions;
+    }
+
+    // Fetch all active automations belonging to that workspace only — this
+    // is what prevents one workspace's inbound message from ever firing
+    // another workspace's automation.
     const { rows: automations } = await client.query(
       `SELECT id, name, status, trigger_type, config
        FROM coexistence.chatbots
-       WHERE status = 'active'`
+       WHERE status = 'active' AND workspace_id = $1`,
+      [workspaceId]
     );
 
     const context = {
@@ -1324,6 +1702,11 @@ async function evaluateTriggers(messageRecord) {
       message_body: messageRecord.message_body,
       message_type: messageRecord.message_type,
       trigger_type: 'keyword',
+      // Phase 6: server-resolved workspaceId (see resolveWorkspaceIdForRecord
+      // above) carried on context so downstream node handlers — in
+      // particular executeActionNode's Set/Clear Custom Field lookups — can
+      // scope coexistence.contact_field_definitions to this workspace.
+      workspace_id: workspaceId,
       trigger_data: {
         message_id: messageRecord.message_id,
         wa_number: messageRecord.wa_number,
@@ -1361,8 +1744,13 @@ async function evaluateTriggers(messageRecord) {
     }
 
     // Field definitions for {{custom_field_name}} resolution + AI persistence.
+    // Phase 6: scoped to this message's workspace (see workspaceId above) —
+    // never global.
     try {
-      const { rows: fdRows } = await client.query(`SELECT id, name FROM coexistence.contact_field_definitions`);
+      const { rows: fdRows } = await client.query(
+        `SELECT id, name FROM coexistence.contact_field_definitions WHERE workspace_id = $1`,
+        [workspaceId]
+      );
       context.field_defs = fdRows;
     } catch (e) { context.field_defs = []; }
 
@@ -1408,10 +1796,8 @@ async function evaluateTriggers(messageRecord) {
   } finally {
     client.release();
   }
-
   return executions;
 }
-
 module.exports = {
   evaluateTriggers,
   executeAutomation,
@@ -1419,4 +1805,9 @@ module.exports = {
   matchesKeyword,
   resolveVariables,
   evaluateConditions,
+  // Phase 7.9 Batch 2 — exported so test/automationEngineProductMessage.test.js
+  // can exercise the 'product'/'catalog' directType branches directly
+  // instead of driving the whole trigger-match -> walkFrom -> executeAutomation
+  // machinery just to reach them. Not used by any other module.
+  executeMessageNode,
 };

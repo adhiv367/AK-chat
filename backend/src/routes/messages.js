@@ -8,10 +8,42 @@ const pool = require('../db');
 const { resolveAccount, insertPendingRow, secondsSinceLastIncoming } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
 const { uploadMedia } = require('../integrations/metaSend');
+// Phase 7.6 — Product Search / Product ID: workspace-scoped product lookup
+// + the shared Meta product-interactive builder (see
+// services/whatsappProductMessage.js). Used only by POST /messages/send-product
+// below; the module internally reuses productService.js's own
+// workspace-isolated lookups rather than bypassing them.
+const whatsappProductMessage = require('../services/whatsappProductMessage');
 const { markAccountHealth, classifyMetaError } = require('../services/accountHealth');
 const storage = require('../util/pgStorage');
 const { syncMediaToAccount } = require('./mediaLibrary');
-const { userWaNumbers, assertWaAccess, assertContactAccess } = require('../middleware/access');
+const crypto = require('crypto');
+const { userWaNumbers, assertWaAccess, assertContactAccess, requireRole, requirePermission } = require('../middleware/access');
+const { getAccountByPhoneNumber } = require('./whatsappAccounts');
+
+// Phase 3C: assertWaAccess/assertContactAccess (middleware/access.js) only
+// check the CALLING USER's role-based visibility (BDA assignment vs admin
+// bypass) — they have no concept of workspace and never did, since they
+// predate workspaces entirely. That means an authenticated admin (or a BDA
+// assigned to a same-numbered contact) could otherwise read/write another
+// workspace's contacts by supplying that workspace's wa_number here. This
+// closes that gap: confirm the client-supplied wa_number actually belongs
+// to the caller's OWN workspace (req.workspace, resolved server-side from
+// the session — never trust a workspace implied by a client-chosen number)
+// before any of these routes touch coexistence.contacts through it.
+async function assertWaWorkspace(req, res, waNumber) {
+  const workspaceId = req.workspace?.id ?? null;
+  if (!workspaceId) {
+    res.status(403).json({ error: 'No workspace found for this account' });
+    return false;
+  }
+  const acc = await getAccountByPhoneNumber(waNumber, workspaceId);
+  if (!acc) {
+    res.status(403).json({ error: 'This WhatsApp number does not belong to your workspace' });
+    return false;
+  }
+  return true;
+}
 const { isAdmin } = require('../permissions');
 const { canonicalizeMime, chatKindFor, CHAT_TYPES_MSG } = require('../util/metaMime');
 const ExcelJS = require('exceljs');
@@ -190,10 +222,25 @@ function timeRangeToInterval(range) {
 // GET /api/numbers
 router.get('/numbers', async (req, res) => {
   try {
+    // Phase 3D: chat_history has no workspace_id of its own — a wa_number's
+    // workspace is derived the same way dashboard.js already does it (see
+    // getConnectedWaNumbers there): via the whatsapp_accounts row that owns
+    // that display number. A workspace with no connected accounts sees no
+    // numbers at all, never another workspace's, regardless of role.
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.json([]);
+    const { rows: acctRows } = await pool.query(
+      `SELECT display_phone_number FROM coexistence.whatsapp_accounts WHERE workspace_id = $1`,
+      [workspaceId]
+    );
+    const workspaceWaNumbers = acctRows.map(r => (r.display_phone_number || '').replace(/\D/g, '')).filter(Boolean);
+    if (workspaceWaNumbers.length === 0) return res.json([]);
+
     // BDA visibility: a wa_number is visible only if the user has at least
-    // one contact assigned to them on that number. Admin sees everything.
+    // one contact assigned to them on that number. Admin sees everything
+    // (still bounded to this workspace's numbers above).
     let extraFilter = '';
-    const params = [];
+    const params = [workspaceWaNumbers];
     if (!isAdmin(req.user)) {
       params.push(req.user.id);
       extraFilter = `AND wa_number IN (
@@ -206,7 +253,8 @@ router.get('/numbers', async (req, res) => {
         MAX(timestamp) AS last_message_time,
         COUNT(*) AS message_count
       FROM coexistence.chat_history
-      WHERE timestamp >= NOW() - ${DEFAULT_DATA_WINDOW} ${extraFilter}
+      WHERE wa_number = ANY($1::text[])
+        AND timestamp >= NOW() - ${DEFAULT_DATA_WINDOW} ${extraFilter}
         -- Only surface numbers that are still connected WhatsApp accounts, so
         -- data from a previously-connected number (after the account is edited
         -- to a new number or removed) stops showing. The rows stay in the DB —
@@ -223,7 +271,7 @@ router.get('/numbers', async (req, res) => {
 
     // Unread chats per wa_number = conversations with >=1 incoming message newer
     // than last_read_at. Respects the same BDA visibility scoping as above.
-    const unreadParams = [];
+    const unreadParams = [workspaceWaNumbers];
     let unreadJoin = '';
     let unreadAssign = '';
     if (!isAdmin(req.user)) {
@@ -238,7 +286,8 @@ router.get('/numbers', async (req, res) => {
       LEFT JOIN coexistence.conversation_reads cr
         ON cr.wa_number = ch.wa_number AND cr.contact_number = ch.contact_number
       ${unreadJoin}
-      WHERE ch.direction = 'incoming'
+      WHERE ch.wa_number = ANY($1::text[])
+        AND ch.direction = 'incoming'
         AND ch.timestamp >= NOW() - ${DEFAULT_DATA_WINDOW}
         AND ch.timestamp > COALESCE(cr.last_read_at, 'epoch'::timestamptz)
         ${unreadAssign}
@@ -299,6 +348,7 @@ router.get('/contacts', async (req, res) => {
     const { waNumber, timeRange = '24h' } = req.query;
     if (!waNumber) return res.status(400).json({ error: 'waNumber required' });
     if (!(await assertWaAccess(req, res, waNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
 
     const interval = timeRangeToInterval(timeRange);
     let timeFilter = `AND timestamp >= NOW() - ${DEFAULT_DATA_WINDOW}`;
@@ -368,7 +418,7 @@ router.get('/contacts', async (req, res) => {
 // Also the backend for manual "Add Contact": accepts any phone formatting
 // (spaces, dashes, +91, bare 10-digit) via normalizePhone, and an optional
 // email that gets merged into custom_fields alongside any existing fields.
-router.post('/contacts/save', async (req, res) => {
+router.post('/contacts/save', requireRole('AGENT'), async (req, res) => {
   try {
     const { waNumber, contactNumber, name, tags, customFields, assignedUserId, email } = req.body;
     if (!waNumber || !contactNumber) {
@@ -394,6 +444,7 @@ router.post('/contacts/save', async (req, res) => {
 
     // Sales users may only edit a contact already assigned to them.
     if (!admin && !(await assertContactAccess(req, res, waNumber, normalizedContactNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
 
     // name is optional: a blank name means "don't touch the name" (used by the
     // chat-header quick-actions that only change tags/assignment). When blank we
@@ -549,10 +600,183 @@ function gridToRowObjects(grid) {
   });
 }
 
+// ── Phase 4I — Import preview/validate ───────────────────────────────────
+// Adds a Preview -> Validate step in front of the existing direct-import
+// endpoint below, without changing that endpoint's behavior (nothing here
+// touches importContactRows' insert/update logic — it's called unchanged by
+// /contacts/import/confirm once the customer confirms what they saw).
+//
+// No new database table: a parsed-and-validated file is small (<=5000 rows,
+// same MAX_ROWS as direct import) and only needs to survive the few minutes
+// between "upload" and "click confirm", so it's held in-memory keyed by a
+// random importId. If the process restarts in that window the id simply
+// stops resolving and confirm returns 410 asking the customer to re-upload
+// — no partial/half-imported data is ever possible, since nothing is
+// written to coexistence.contacts until confirm runs importContactRows.
+const IMPORT_PREVIEW_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const importPreviewSessions = new Map(); // importId -> { rows, waNumber, workspaceId, userId, admin, expiresAt }
+
+function cleanupExpiredImportSessions() {
+  const now = Date.now();
+  for (const [id, s] of importPreviewSessions) {
+    if (s.expiresAt < now) importPreviewSessions.delete(id);
+  }
+}
+
+// Classifies parsed rows the same way importContactRows will treat them,
+// but performs no writes. "duplicate" = a contact already exists for this
+// wa_number+contact_number in THIS workspace (import will update it, same
+// as direct import always has); "valid" = will insert a new contact;
+// "invalid" = missing/unusable phone, missing name, or a repeat phone
+// within the file itself.
+async function classifyImportRows(rows, waNumber) {
+  const phones = [];
+  const parsed = rows.map((row, i) => {
+    const rowNum = i + 2;
+    const rawName = pickImportColumn(row, IMPORT_NAME_ALIASES);
+    const rawPhone = pickImportColumn(row, IMPORT_PHONE_ALIASES);
+    const rawEmail = pickImportColumn(row, IMPORT_EMAIL_ALIASES);
+    const name = (rawName === undefined || rawName === null) ? '' : String(rawName).trim();
+    const email = (rawEmail === undefined || rawEmail === null) ? '' : String(rawEmail).trim();
+    const phone = normalizePhone(rawPhone);
+    if (phone) phones.push(phone);
+    return { rowNum, name, email, phone, rawPhone: String(rawPhone ?? '').trim() };
+  });
+
+  const { rows: existingRows } = phones.length
+    ? await pool.query(
+        `SELECT contact_number FROM coexistence.contacts WHERE wa_number = $1 AND contact_number = ANY($2::text[])`,
+        [waNumber, phones]
+      )
+    : { rows: [] };
+  const existingPhones = new Set(existingRows.map((r) => r.contact_number));
+
+  const seen = new Set();
+  const classified = parsed.map((r) => {
+    if (!r.phone) return { ...r, status: 'invalid', reason: `Invalid or missing phone "${r.rawPhone || '(blank)'}"` };
+    if (!r.name) return { ...r, status: 'invalid', reason: 'Missing name' };
+    if (seen.has(r.phone)) return { ...r, status: 'invalid', reason: 'Duplicate phone in sheet' };
+    seen.add(r.phone);
+    if (existingPhones.has(r.phone)) return { ...r, status: 'duplicate', reason: 'Already exists — will be updated' };
+    return { ...r, status: 'valid', reason: null };
+  });
+
+  return classified;
+}
+
+// POST /api/contacts/import/preview — upload, parse, and validate a
+// .csv/.xlsx WITHOUT writing anything. Returns row-level classification
+// (valid/duplicate/invalid) plus a summary, and an importId to confirm with.
+router.post('/contacts/import/preview', requireRole('AGENT'), requirePermission('contacts'), sheetUpload.single('file'), async (req, res) => {
+  try {
+    const waNumber = String(req.body.waNumber || '').replace(/\D/g, '');
+    if (!waNumber) return res.status(400).json({ error: 'waNumber required' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const admin = isAdmin(req.user);
+    if (!admin && !(await assertWaAccess(req, res, waNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
+
+    let rows;
+    try {
+      rows = await parseSheetRows(req.file);
+    } catch {
+      return res.status(400).json({ error: 'Could not read the file. Upload a valid .csv or .xlsx sheet.' });
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'The sheet has no data rows.' });
+    }
+    const MAX_ROWS = 5000;
+    if (rows.length > MAX_ROWS) {
+      return res.status(400).json({ error: `Too many rows (${rows.length}). The limit is ${MAX_ROWS} per import.` });
+    }
+
+    const classified = await classifyImportRows(rows, waNumber);
+    const valid = classified.filter((r) => r.status === 'valid').length;
+    const duplicate = classified.filter((r) => r.status === 'duplicate').length;
+    const invalid = classified.filter((r) => r.status === 'invalid').length;
+
+    cleanupExpiredImportSessions();
+    const importId = crypto.randomUUID();
+    importPreviewSessions.set(importId, {
+      // Only rows that will actually be written are kept for confirm — no
+      // point carrying invalid rows through to the insert/update step.
+      // Stored under canonical "Name"/"Phone"/"Email" headers so
+      // importContactRows' own pickImportColumn/normalizePhone re-run on
+      // confirm exactly as they would for a direct import — one code path,
+      // not a re-derived copy of its insert logic.
+      rows: classified.filter((r) => r.status !== 'invalid').map((r) => ({ Name: r.name, Phone: r.phone, Email: r.email })),
+      waNumber,
+      workspaceId: req.workspace.id,
+      userId: req.user.id,
+      admin,
+      expiresAt: Date.now() + IMPORT_PREVIEW_TTL_MS,
+    });
+
+    res.json({
+      ok: true,
+      importId,
+      total: rows.length,
+      valid,
+      duplicate,
+      invalid,
+      rows: classified.slice(0, 200).map((r) => ({
+        row: r.rowNum, name: r.name || null, phone: r.phone || r.rawPhone || null,
+        email: r.email || null, status: r.status, reason: r.reason,
+      })),
+      truncated: classified.length > 200,
+    });
+  } catch (err) {
+    console.error('[messages] /contacts/import/preview error:', err.message);
+    res.status(500).json({ error: 'Failed to preview import' });
+  }
+});
+
+// POST /api/contacts/import/confirm — commits a previously-previewed
+// import. Re-checks permission/role/workspace-ownership independently of
+// whatever the preview session recorded (never trust stored state for
+// authorization), then hands the same rows to importContactRows() that
+// /contacts/import uses directly — identical insert/update/dedupe behavior.
+router.post('/contacts/import/confirm', requireRole('AGENT'), requirePermission('contacts'), async (req, res) => {
+  try {
+    const { importId } = req.body || {};
+    if (!importId) return res.status(400).json({ error: 'importId required' });
+
+    cleanupExpiredImportSessions();
+    const session = importPreviewSessions.get(importId);
+    if (!session) {
+      return res.status(410).json({ error: 'This preview has expired. Please re-upload the file.' });
+    }
+
+    const waNumber = String(req.body.waNumber || session.waNumber || '').replace(/\D/g, '');
+    if (waNumber !== session.waNumber) {
+      return res.status(400).json({ error: 'waNumber does not match the previewed file.' });
+    }
+
+    // workspace_id is always re-derived from the authenticated session
+    // (req.workspace), never trusted from the stored preview — a workspace
+    // switch between preview and confirm must not let this write elsewhere.
+    const admin = isAdmin(req.user);
+    if (!admin && !(await assertWaAccess(req, res, waNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
+    if (req.workspace.id !== session.workspaceId) {
+      return res.status(403).json({ error: 'Workspace changed since preview — please re-upload the file.' });
+    }
+
+    const { imported, updated, skipped } = await importContactRows(session.rows, { waNumber, admin, userId: req.user.id });
+    importPreviewSessions.delete(importId);
+
+    res.json({ ok: true, imported, updated, skipped, total: session.rows.length });
+  } catch (err) {
+    console.error('[messages] /contacts/import/confirm error:', err.message);
+    res.status(500).json({ error: 'Failed to import contacts' });
+  }
+});
+
 // POST /api/contacts/import — bulk-import contacts (Name + Phone) from a .csv/.xlsx
 // sheet onto a WhatsApp number. Parsed server-side with exceljs; row-by-row upsert
 // keyed on UNIQUE(wa_number, contact_number). Returns counts + skipped rows.
-router.post('/contacts/import', sheetUpload.single('file'), async (req, res) => {
+router.post('/contacts/import', requireRole('AGENT'), sheetUpload.single('file'), async (req, res) => {
   try {
     const waNumber = String(req.body.waNumber || '').replace(/\D/g, '');
     if (!waNumber) return res.status(400).json({ error: 'waNumber required' });
@@ -561,6 +785,7 @@ router.post('/contacts/import', sheetUpload.single('file'), async (req, res) => 
     const admin = isAdmin(req.user);
     // Non-admins may only import onto a WhatsApp number they have access to.
     if (!admin && !(await assertWaAccess(req, res, waNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
 
     let rows;
     try {
@@ -594,7 +819,7 @@ router.post('/contacts/import', sheetUpload.single('file'), async (req, res) => 
 // same header-detection/phone-normalization/dedupe logic as the file import
 // via importContactRows, and the same read-only sheet fetcher the background
 // sync uses — KlutchChat still never writes to the sheet.
-router.post('/contacts/import-sheet', async (req, res) => {
+router.post('/contacts/import-sheet', requireRole('AGENT'), async (req, res) => {
   try {
     const waNumber = String(req.body.waNumber || '').replace(/\D/g, '');
     const sheetUrl = String(req.body.sheetUrl || '').trim();
@@ -603,6 +828,7 @@ router.post('/contacts/import-sheet', async (req, res) => {
 
     const admin = isAdmin(req.user);
     if (!admin && !(await assertWaAccess(req, res, waNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
 
     let grid;
     try {
@@ -632,7 +858,7 @@ router.post('/contacts/import-sheet', async (req, res) => {
 // record (name/profile_name/tags/custom_fields/assignment). Chat history lives in
 // a separate table and is left intact; a future inbound message will recreate a
 // bare row from the WhatsApp profile name.
-router.delete('/contact', async (req, res) => {
+router.delete('/contact', requireRole('AGENT'), async (req, res) => {
   try {
     const waNumber = req.query.waNumber || req.body?.waNumber;
     const contactNumber = req.query.contactNumber || req.body?.contactNumber;
@@ -641,6 +867,7 @@ router.delete('/contact', async (req, res) => {
     }
     // BDAs can only delete a contact they have access to; admins can delete any.
     if (!(await assertContactAccess(req, res, waNumber, contactNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
     const { rowCount } = await pool.query(
       `DELETE FROM coexistence.contacts WHERE wa_number = $1 AND contact_number = $2`,
       [waNumber, contactNumber]
@@ -658,6 +885,7 @@ router.get('/saved-contacts', async (req, res) => {
     const { waNumber } = req.query;
     if (!waNumber) return res.status(400).json({ error: 'waNumber required' });
     if (!(await assertWaAccess(req, res, waNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
 
     const params = [waNumber];
     let assignFilter = '';
@@ -689,6 +917,7 @@ router.get('/contact', async (req, res) => {
       return res.status(400).json({ error: 'waNumber and contactNumber required' });
     }
     if (!(await assertContactAccess(req, res, waNumber, contactNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
 
     const { rows } = await pool.query(`
       SELECT c.contact_number, COALESCE(c.name, c.profile_name) AS name, c.tags, c.custom_fields, c.created_at, c.updated_at,
@@ -721,13 +950,15 @@ router.post('/messages/mark-read', async (req, res) => {
       return res.status(400).json({ error: 'waNumber and contactNumber required' });
     }
     if (!(await assertContactAccess(req, res, waNumber, contactNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
 
+    const workspaceId = req.workspace?.id ?? null;
     await pool.query(`
-      INSERT INTO coexistence.conversation_reads (wa_number, contact_number, last_read_at)
-      VALUES ($1, $2, NOW())
-      ON CONFLICT (wa_number, contact_number)
+      INSERT INTO coexistence.conversation_reads (workspace_id, wa_number, contact_number, last_read_at)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (workspace_id, wa_number, contact_number)
       DO UPDATE SET last_read_at = NOW()
-    `, [waNumber, contactNumber]);
+    `, [workspaceId, waNumber, contactNumber]);
 
     res.json({ ok: true });
   } catch (err) {
@@ -749,6 +980,7 @@ router.get('/messages', async (req, res) => {
       return res.status(400).json({ error: 'waNumber and contactNumber required' });
     }
     if (!(await assertContactAccess(req, res, waNumber, contactNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
@@ -813,11 +1045,50 @@ router.get('/messages', async (req, res) => {
       }
     }
 
+    // Phase 6.5 — WhatsApp Flow submission display. chat_history never
+    // stored the submitted answers (only message_body = 'Sent'); they live
+    // in coexistence.flow_submissions, keyed by the same message_id. Read
+    // ONLY (no write, no schema change) and attach a sanitized
+    // flow_response_data object to the matching flow_response row so the
+    // frontend can render it. flow_token / internal ids are stripped here
+    // so they can never reach the client. Every other message type/row is
+    // untouched.
+    const flowMsgIds = rows
+      .filter(r => r.message_type === 'flow_response' && r.message_id)
+      .map(r => r.message_id);
+    const flowDataByMsg = {};
+    if (flowMsgIds.length > 0) {
+      try {
+        const { rows: fs } = await pool.query(
+          `SELECT message_id, response_json
+             FROM coexistence.flow_submissions
+            WHERE message_id = ANY($1)`,
+          [flowMsgIds]
+        );
+        for (const f of fs) {
+          const data = (f.response_json && typeof f.response_json === 'object')
+            ? { ...f.response_json }
+            : {};
+          delete data.flow_token;
+          flowDataByMsg[f.message_id] = data;
+        }
+      } catch (flowErr) {
+        // Never let a lookup problem here break normal message loading.
+        console.error('[messages] flow_submissions lookup error:', flowErr.message);
+      }
+    }
+
     res.json({
       messages: rows
         // Strip raw_payload (the full Meta webhook JSON) — it's internal-only,
         // never read by the client, and can carry extra PII / metadata.
-        .map(({ raw_payload, ...m }) => ({ ...m, reactions: reactionsByMsg[m.message_id] || [] }))
+        .map(({ raw_payload, ...m }) => ({
+          ...m,
+          reactions: reactionsByMsg[m.message_id] || [],
+          ...(m.message_type === 'flow_response'
+            ? { flow_response_data: flowDataByMsg[m.message_id] || null }
+            : {}),
+        }))
         .reverse(), // oldest first for chat display
       total,
       page: pageNum,
@@ -835,6 +1106,7 @@ router.get('/contact-names', async (req, res) => {
     const { waNumber } = req.query;
     if (!waNumber) return res.status(400).json({ error: 'waNumber required' });
     if (!(await assertWaAccess(req, res, waNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
 
     const params = [waNumber];
     let assignFilter = '';
@@ -866,7 +1138,8 @@ router.get('/messages/window-status', async (req, res) => {
   try {
     const { waNumber, contactNumber } = req.query;
     if (!waNumber || !contactNumber) return res.status(400).json({ error: 'waNumber and contactNumber required' });
-    const { account, error } = await resolveAccount({ fromPhoneNumber: waNumber });
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
+    const { account, error } = await resolveAccount({ fromPhoneNumber: waNumber, workspaceId: req.workspace?.id });
     if (error) return res.json({ canSendFreeForm: false, reason: error, windowSeconds: SERVICE_WINDOW_SECONDS });
     const secs = await secondsSinceLastIncoming({ accountPhoneNumberId: account.phoneNumberId, contactNumber });
     res.json({
@@ -888,15 +1161,16 @@ router.get('/messages/window-status', async (req, res) => {
  * Sends an emoji reaction to a message (empty emoji removes it). Requires the
  * 24-hour customer service window to be open. Records our reaction locally.
  */
-router.post('/messages/react', async (req, res) => {
+router.post('/messages/react', requireRole('AGENT'), async (req, res) => {
   try {
     const { fromNumber, toNumber, messageId, emoji } = req.body || {};
     if (!fromNumber || !toNumber || !messageId) {
       return res.status(400).json({ error: 'fromNumber, toNumber and messageId required' });
     }
     if (!(await assertContactAccess(req, res, fromNumber, toNumber))) return;
+    if (!(await assertWaWorkspace(req, res, fromNumber))) return;
 
-    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber });
+    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber, workspaceId: req.workspace?.id });
     if (error) return res.status(409).json({ error });
 
     const secs = await secondsSinceLastIncoming({ accountPhoneNumberId: account.phoneNumberId, contactNumber: toNumber });
@@ -946,13 +1220,14 @@ router.post('/messages/react', async (req, res) => {
  * Body: { waNumber, contactNumber, messageId, starred }
  * Toggles the local "starred" flag on a message (CRM-only bookmark).
  */
-router.post('/messages/star', async (req, res) => {
+router.post('/messages/star', requireRole('AGENT'), async (req, res) => {
   try {
     const { waNumber, contactNumber, messageId, starred } = req.body || {};
     if (!waNumber || !contactNumber || !messageId) {
       return res.status(400).json({ error: 'waNumber, contactNumber and messageId required' });
     }
     if (!(await assertContactAccess(req, res, waNumber, contactNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
     // Scope to the validated (wa_number, contact_number) so a pair the user owns
     // can't be used to star a message_id from another conversation (IDOR).
     const waDigits = String(waNumber).replace(/\D/g, '');
@@ -976,7 +1251,7 @@ router.post('/messages/star', async (req, res) => {
  * Inserts an optimistic chat_history row (status='sending') and enqueues a
  * BullMQ job. Returns the row immediately so the UI can render the bubble.
  */
-router.post('/messages/send', async (req, res) => {
+router.post('/messages/send', requireRole('AGENT'), async (req, res) => {
   try {
     const { fromNumber, toNumber, text, contextMessageId } = req.body || {};
     if (!fromNumber || !toNumber || !text || !String(text).trim()) {
@@ -989,8 +1264,9 @@ router.post('/messages/send', async (req, res) => {
     // requester (admins bypass). This ties fromNumber to the user and gates
     // toNumber — a non-admin can't send from a WABA or to a contact they don't own.
     if (!(await assertContactAccess(req, res, fromNumber, toNumber))) return;
+    if (!(await assertWaWorkspace(req, res, fromNumber))) return;
 
-    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber });
+    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber, workspaceId: req.workspace?.id });
     if (error) return res.status(400).json({ error });
 
     // Enforce Meta's 24h customer service window for free-form text
@@ -1057,14 +1333,15 @@ router.post('/messages/send', async (req, res) => {
  * Uploads the binary to Meta to get a media_id, then enqueues a send job.
  * Subject to the 24h customer service window same as text.
  */
-router.post('/messages/send-media', mediaUpload.single('file'), async (req, res) => {
+router.post('/messages/send-media', requireRole('AGENT'), mediaUpload.single('file'), async (req, res) => {
   try {
     const { fromNumber, toNumber, caption = '', contextMessageId } = req.body || {};
     if (!fromNumber || !toNumber) return res.status(400).json({ error: 'fromNumber and toNumber required' });
     if (!req.file) return res.status(400).json({ error: 'file required' });
     if (!(await assertContactAccess(req, res, fromNumber, toNumber))) return;
+    if (!(await assertWaWorkspace(req, res, fromNumber))) return;
 
-    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber });
+    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber, workspaceId: req.workspace?.id });
     if (error) return res.status(400).json({ error });
 
     const secs = await secondsSinceLastIncoming({ accountPhoneNumberId: account.phoneNumberId, contactNumber: toNumber });
@@ -1140,12 +1417,255 @@ router.post('/messages/send-media', mediaUpload.single('file'), async (req, res)
 });
 
 /**
+ * POST /messages/send-product
+ * Body: { fromNumber, toNumber, productId, caption?, contextMessageId? }
+ *
+ * Phase 7.6 — sends a WhatsApp single-product message for a product already
+ * in the caller's own workspace catalog (coexistence.products). `productId`
+ * here is that product's INTERNAL id (the row the agent selected in
+ * ProductPicker.jsx) — not to be confused with the product's external
+ * Product ID/SKU/retailer_id column, which productService.findProductByExternalId
+ * handles for other entry points.
+ *
+ * Isolation, mirrored from every other route in this file:
+ *   - fromNumber/toNumber ownership: assertContactAccess (unchanged).
+ *   - fromNumber belongs to the caller's OWN workspace: assertWaWorkspace
+ *     (unchanged) — this is also what makes req.workspace.id trustworthy
+ *     below.
+ *   - The product looked up by productId must belong to that SAME
+ *     workspace — enforced by productService.getProduct, which 404s
+ *     rather than leaking cross-workspace existence.
+ *   - The Meta catalog id is NEVER accepted from the client. It is
+ *     resolved server-side from coexistence.meta_catalog_connections via
+ *     whatsappProductMessage.resolveCatalogForAccount(workspaceId,
+ *     account.id) — scoped to both the workspace and the specific
+ *     WhatsApp account doing the sending.
+ *
+ * Reuses the exact same send path as every other interactive message in
+ * this codebase: insertPendingRow() -> enqueueSend({ kind: 'interactive' })
+ * -> queue/sendQueue.js's existing 'interactive' branch -> integrations/
+ * metaSend.js's sendInteractive(). Neither of those two files is touched.
+ */
+router.post('/messages/send-product', requireRole('AGENT'), async (req, res) => {
+  try {
+    const { fromNumber, toNumber, productId, caption = '', contextMessageId } = req.body || {};
+    if (!fromNumber || !toNumber) return res.status(400).json({ error: 'fromNumber and toNumber required' });
+    if (!productId) return res.status(400).json({ error: 'productId required' });
+    if (!(await assertContactAccess(req, res, fromNumber, toNumber))) return;
+    if (!(await assertWaWorkspace(req, res, fromNumber))) return;
+
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(403).json({ error: 'No workspace found for this account' });
+
+    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber, workspaceId });
+    if (error) return res.status(400).json({ error });
+
+    const secs = await secondsSinceLastIncoming({ accountPhoneNumberId: account.phoneNumberId, contactNumber: toNumber });
+    if (secs == null || secs > SERVICE_WINDOW_SECONDS) {
+      return res.status(409).json({ error: 'Outside 24-hour customer service window.', code: 'OUTSIDE_WINDOW' });
+    }
+
+    // Product lookup — workspace-scoped. A productId belonging to another
+    // workspace surfaces as 404 here, exactly like every other product
+    // lookup in this codebase (productService.js's isolation model).
+    let product;
+    try {
+      product = await whatsappProductMessage.resolveProductForMessage(workspaceId, { id: productId });
+    } catch (err) {
+      if (err instanceof whatsappProductMessage.NotFoundError) return res.status(404).json({ error: err.message });
+      if (err instanceof whatsappProductMessage.ValidationError) return res.status(400).json({ error: err.message });
+      throw err;
+    }
+
+    // Catalog id — resolved server-side only, scoped to this workspace +
+    // this specific WhatsApp account. Never trust a catalogId from req.body.
+    let catalogId;
+    try {
+      catalogId = await whatsappProductMessage.resolveCatalogForAccount(workspaceId, account.id);
+    } catch (err) {
+      if (err instanceof whatsappProductMessage.ValidationError) return res.status(400).json({ error: err.message });
+      throw err;
+    }
+
+    const retailerId = whatsappProductMessage.resolveRetailerId(product);
+    const trimmedCaption = String(caption || '').trim();
+    const interactive = whatsappProductMessage.buildProductInteractive({
+      catalogId,
+      productRetailerId: retailerId,
+      bodyText: trimmedCaption,
+    });
+
+    const ctxId = sanitizeContextId(contextMessageId);
+    // Phase 7.9 — stash just enough of the product (name/image/price) on
+    // the outgoing chat_history row's existing template_meta JSONB column
+    // so MessageBubble.jsx can render a rich product card for this
+    // message without a second lookup. Purely additive: template_meta is
+    // already a generic per-row metadata column (see messageSender.js),
+    // already threaded through GET /messages' `SELECT *`, and defaults to
+    // null for every other message type/caller, so nothing existing is
+    // affected by populating it here.
+    const localId = await insertPendingRow({
+      account, toNumber, messageType: 'interactive',
+      messageBody: trimmedCaption || product.name,
+      contextMessageId: ctxId,
+      templateMeta: {
+        kind: 'product',
+        product: {
+          id: product.id,
+          name: product.name,
+          imageUrl: product.image_url || null,
+          price: product.price != null ? product.price : null,
+          currency: product.currency || null,
+          retailerId,
+        },
+      },
+    });
+
+    // NOTE: metaSend.js's sendInteractive() has no contextMessageId param
+    // (interactive/product messages aren't quote-repliable via the Cloud
+    // API the way text/media are) — ctxId above is only stored on the
+    // local chat_history row above for the UI's own quote-reply rendering,
+    // same as every other interactive send in this codebase.
+    await enqueueSend({
+      kind: 'interactive',
+      accountId: account.id,
+      to: String(toNumber).replace(/\D/g, ''),
+      localMessageId: localId,
+      payload: { interactive },
+    });
+
+    res.status(202).json({
+      ok: true, messageId: localId, status: 'sending',
+      product: { id: product.id, name: product.name, retailerId },
+    });
+  } catch (err) {
+    console.error('[messages] send-product error:', err.message);
+    res.status(500).json({ error: 'Failed to send product' });
+  }
+});
+
+/**
+ * POST /messages/send-catalog
+ * Body: { fromNumber, toNumber, body, thumbnailProductId?, contextMessageId? }
+ *
+ * Phase 7.9 — sends a WhatsApp "catalog message" (interactive.type ===
+ * 'catalog_message'), showing the customer the full catalog connected to
+ * the sending WhatsApp account rather than a single product. Deliberately
+ * the exact same proven shape as POST /messages/send-product above:
+ *
+ *   - fromNumber/toNumber ownership: assertContactAccess (unchanged).
+ *   - fromNumber belongs to the caller's OWN workspace: assertWaWorkspace
+ *     (unchanged).
+ *   - `thumbnailProductId`, when supplied, is the product's INTERNAL id
+ *     (picked from ProductPicker.jsx in its catalog mode) — resolved and
+ *     workspace-scoped via whatsappProductMessage.resolveProductForMessage,
+ *     exactly like send-product resolves productId. It is OPTIONAL: Meta's
+ *     catalog_message only needs body text; a thumbnail product is a
+ *     cosmetic nicety, not a requirement.
+ *   - A connected Meta catalog is still required before sending (same
+ *     resolveCatalogForAccount check send-product uses) — this route does
+ *     not put that catalog id in the payload itself (buildCatalogInteractive
+ *     never has; see services/whatsappProductMessage.js), it only uses the
+ *     check to fail fast with a clear error instead of a silent Meta-side
+ *     rejection when no catalog is connected for this account.
+ *
+ * Reuses the exact same send path as send-product: insertPendingRow() ->
+ * enqueueSend({ kind: 'interactive' }) -> queue/sendQueue.js's existing
+ * 'interactive' branch -> integrations/metaSend.js's sendInteractive().
+ * Neither of those two files is touched.
+ */
+router.post('/messages/send-catalog', requireRole('AGENT'), async (req, res) => {
+  try {
+    const { fromNumber, toNumber, body = '', thumbnailProductId, contextMessageId } = req.body || {};
+    if (!fromNumber || !toNumber) return res.status(400).json({ error: 'fromNumber and toNumber required' });
+    const trimmedBody = String(body || '').trim();
+    if (!trimmedBody) return res.status(400).json({ error: 'body is required' });
+    if (!(await assertContactAccess(req, res, fromNumber, toNumber))) return;
+    if (!(await assertWaWorkspace(req, res, fromNumber))) return;
+
+    const workspaceId = req.workspace?.id ?? null;
+    if (!workspaceId) return res.status(403).json({ error: 'No workspace found for this account' });
+
+    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber, workspaceId });
+    if (error) return res.status(400).json({ error });
+
+    const secs = await secondsSinceLastIncoming({ accountPhoneNumberId: account.phoneNumberId, contactNumber: toNumber });
+    if (secs == null || secs > SERVICE_WINDOW_SECONDS) {
+      return res.status(409).json({ error: 'Outside 24-hour customer service window.', code: 'OUTSIDE_WINDOW' });
+    }
+
+    // A connected catalog is required to send any catalog-backed message —
+    // same fail-fast check send-product uses. Its return value isn't put
+    // in the payload (see function doc above); this is validation only.
+    try {
+      await whatsappProductMessage.resolveCatalogForAccount(workspaceId, account.id);
+    } catch (err) {
+      if (err instanceof whatsappProductMessage.ValidationError) return res.status(400).json({ error: err.message });
+      throw err;
+    }
+
+    // Optional thumbnail product — workspace-scoped lookup, same isolation
+    // model as send-product's productId resolution. A thumbnailProductId
+    // belonging to another workspace surfaces as 404, never leaked.
+    let thumbnailProduct = null;
+    let thumbnailRetailerId;
+    if (thumbnailProductId) {
+      try {
+        thumbnailProduct = await whatsappProductMessage.resolveProductForMessage(workspaceId, { id: thumbnailProductId });
+        thumbnailRetailerId = whatsappProductMessage.resolveRetailerId(thumbnailProduct);
+      } catch (err) {
+        if (err instanceof whatsappProductMessage.NotFoundError) return res.status(404).json({ error: err.message });
+        if (err instanceof whatsappProductMessage.ValidationError) return res.status(400).json({ error: err.message });
+        throw err;
+      }
+    }
+
+    const interactive = whatsappProductMessage.buildCatalogInteractive({
+      catalogId: thumbnailRetailerId, // see buildCatalogInteractive's own doc: this param is the thumbnail's retailer id, not the Meta catalog id
+      bodyText: trimmedBody,
+    });
+
+    const ctxId = sanitizeContextId(contextMessageId);
+    const localId = await insertPendingRow({
+      account, toNumber, messageType: 'interactive',
+      messageBody: trimmedBody,
+      contextMessageId: ctxId,
+      templateMeta: {
+        kind: 'catalog',
+        body: trimmedBody,
+        thumbnail: thumbnailProduct ? {
+          id: thumbnailProduct.id,
+          name: thumbnailProduct.name,
+          imageUrl: thumbnailProduct.image_url || null,
+        } : null,
+      },
+    });
+
+    await enqueueSend({
+      kind: 'interactive',
+      accountId: account.id,
+      to: String(toNumber).replace(/\D/g, ''),
+      localMessageId: localId,
+      payload: { interactive },
+    });
+
+    res.status(202).json({
+      ok: true, messageId: localId, status: 'sending',
+      thumbnail: thumbnailProduct ? { id: thumbnailProduct.id, name: thumbnailProduct.name, retailerId: thumbnailRetailerId } : null,
+    });
+  } catch (err) {
+    console.error('[messages] send-catalog error:', err.message);
+    res.status(500).json({ error: 'Failed to send catalog' });
+  }
+});
+
+/**
  * POST /messages/send-audio (multipart)
  * Fields: fromNumber, toNumber, file (browser-recorded audio blob)
  * Transcodes the browser's webm/opus output to ogg/opus (Meta-accepted),
  * uploads to Meta, mirrors locally, and enqueues send.
  */
-router.post('/messages/send-audio', mediaUpload.single('file'), async (req, res) => {
+router.post('/messages/send-audio', requireRole('AGENT'), mediaUpload.single('file'), async (req, res) => {
   try {
     const { fromNumber, toNumber, contextMessageId } = req.body || {};
     if (!fromNumber || !toNumber) return res.status(400).json({ error: 'fromNumber and toNumber required' });
@@ -1154,8 +1674,9 @@ router.post('/messages/send-audio', mediaUpload.single('file'), async (req, res)
       return res.status(400).json({ error: 'The recording was empty. Please record again before sending.' });
     }
     if (!(await assertContactAccess(req, res, fromNumber, toNumber))) return;
+    if (!(await assertWaWorkspace(req, res, fromNumber))) return;
 
-    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber });
+    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber, workspaceId: req.workspace?.id });
     if (error) return res.status(400).json({ error });
 
     const secs = await secondsSinceLastIncoming({ accountPhoneNumberId: account.phoneNumberId, contactNumber: toNumber });
@@ -1238,15 +1759,16 @@ router.post('/messages/send-audio', mediaUpload.single('file'), async (req, res)
  * meta_media_id is expired/failed — the caller never has to worry about
  * Meta's 28-day TTL.
  */
-router.post('/messages/send-library-media', async (req, res) => {
+router.post('/messages/send-library-media', requireRole('AGENT'), async (req, res) => {
   try {
     const { fromNumber, toNumber, mediaLibraryId, caption = '', contextMessageId } = req.body || {};
     if (!fromNumber || !toNumber || !mediaLibraryId) {
       return res.status(400).json({ error: 'fromNumber, toNumber, mediaLibraryId required' });
     }
     if (!(await assertContactAccess(req, res, fromNumber, toNumber))) return;
+    if (!(await assertWaWorkspace(req, res, fromNumber))) return;
 
-    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber });
+    const { account, error } = await resolveAccount({ fromPhoneNumber: fromNumber, workspaceId: req.workspace?.id });
     if (error) return res.status(400).json({ error });
 
     const secs = await secondsSinceLastIncoming({
@@ -1256,10 +1778,15 @@ router.post('/messages/send-library-media', async (req, res) => {
       return res.status(409).json({ error: 'Outside 24-hour customer service window.', code: 'OUTSIDE_WINDOW' });
     }
 
+    // Phase 7.12B fix: scope the media_library lookup to the caller's own
+    // workspace (req.workspace.id, resolved server-side by attachWorkspace —
+    // never client input). Previously this queried by id alone, so any
+    // authenticated agent could supply another workspace's mediaLibraryId
+    // and have it resolved/synced/sent through their own WABA.
     const { rows: mRows } = await pool.query(
       `SELECT * FROM coexistence.media_library
-        WHERE id = $1 AND deleted_at IS NULL`,
-      [mediaLibraryId]
+        WHERE id = $1 AND deleted_at IS NULL AND workspace_id = $2`,
+      [mediaLibraryId, req.workspace?.id ?? null]
     );
     if (!mRows.length) return res.status(404).json({ error: 'Media not found in library' });
     const media = mRows[0];
@@ -1276,7 +1803,7 @@ router.post('/messages/send-library-media', async (req, res) => {
       || (sync.expires_at && new Date(sync.expires_at) <= new Date());
     if (needsSync) {
       try {
-        sync = await syncMediaToAccount(media.id, account.id);
+        sync = await syncMediaToAccount(media.id, account.id, req.workspace?.id ?? null);
         // syncMediaToAccount returns a `rowToSync`-shaped object — adapt keys
         sync = {
           meta_media_id: sync.metaMediaId,
@@ -1357,6 +1884,7 @@ router.get('/messages/ai-status', async (req, res) => {
       return res.status(400).json({ error: 'waNumber and contactNumber required' });
     }
     if (!(await assertContactAccess(req, res, waNumber, contactNumber))) return;
+    if (!(await assertWaWorkspace(req, res, waNumber))) return;
 
     const { rows } = await pool.query(
       `SELECT last_agent_reply_at, last_agent_reply_by
@@ -1379,7 +1907,4 @@ router.get('/messages/ai-status', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch AI status' });
   }
 });
-
 module.exports = { router };
-
-

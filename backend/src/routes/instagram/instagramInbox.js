@@ -2,9 +2,26 @@ const express = require('express');
 const pool = require('../../db');
 const router = express.Router();
 
-// List all conversations for the inbox left panel
+// instagram_messages / instagram_notes have no workspace_id of their own
+// (see instagramWorkspaceSchema.js — "add workspace_id only where genuinely
+// required") — they key off conversation_id / contact_id, both of which now
+// carry workspace_id directly. This helper does that ownership check so
+// every route below can 404 instead of ever touching another workspace's
+// conversation.
+async function getOwnedConversation(conversationId, workspaceId) {
+  const { rows } = await pool.query(
+    `SELECT * FROM coexistence.instagram_conversations WHERE id = $1 AND workspace_id = $2`,
+    [conversationId, workspaceId]
+  );
+  return rows[0] || null;
+}
+
+// List all conversations for the inbox left panel — scoped to the current
+// workspace only.
 router.get('/instagram/inbox', async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id;
+    if (!workspaceId) return res.json([]);
     const { rows } = await pool.query(`
     SELECT c.id,
            c.status,
@@ -19,9 +36,9 @@ router.get('/instagram/inbox', async (req, res) => {
     FROM coexistence.instagram_conversations c
     JOIN coexistence.instagram_contacts ct
       ON ct.id = c.contact_id
-    WHERE ($1::bigint IS NULL OR c.instagram_account_id = $1)
+    WHERE c.workspace_id = $1
     ORDER BY c.updated_at DESC
-`, [req.query.accountId || null]);
+`, [workspaceId]);
     res.json(rows);
   } catch (err) {
     console.error('[instagram/inbox]', err.message);
@@ -32,6 +49,10 @@ router.get('/instagram/inbox', async (req, res) => {
 // Get all messages in one conversation (chat thread)
 router.get('/instagram/inbox/:conversationId/messages', async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id;
+    if (!workspaceId) return res.status(404).json({ error: 'Conversation not found' });
+    const convo = await getOwnedConversation(req.params.conversationId, workspaceId);
+    if (!convo) return res.status(404).json({ error: 'Conversation not found' });
     const { rows } = await pool.query(
       `SELECT * FROM coexistence.instagram_messages WHERE conversation_id = $1 ORDER BY created_at ASC`,
       [req.params.conversationId]
@@ -46,6 +67,11 @@ router.get('/instagram/inbox/:conversationId/messages', async (req, res) => {
 // Send a message in a conversation (stub — no real Meta call yet)
 router.post('/instagram/inbox/:conversationId/messages', async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id;
+    if (!workspaceId) return res.status(404).json({ error: 'Conversation not found' });
+    const convo = await getOwnedConversation(req.params.conversationId, workspaceId);
+    if (!convo) return res.status(404).json({ error: 'Conversation not found' });
+
     const { content } = req.body;
     const { conversationId } = req.params;
     const { rows } = await pool.query(
@@ -57,16 +83,10 @@ router.post('/instagram/inbox/:conversationId/messages', async (req, res) => {
       `UPDATE coexistence.instagram_conversations SET updated_at = NOW() WHERE id = $1`,
       [conversationId]
     );
-    const convo = await pool.query(
-      `SELECT contact_id FROM coexistence.instagram_conversations WHERE id = $1`,
-      [conversationId]
+    await pool.query(
+      `UPDATE coexistence.instagram_contacts SET last_message = $1, updated_at = NOW() WHERE id = $2`,
+      [content, convo.contact_id]
     );
-    if (convo.rows[0]) {
-      await pool.query(
-        `UPDATE coexistence.instagram_contacts SET last_message = $1, updated_at = NOW() WHERE id = $2`,
-        [content, convo.rows[0].contact_id]
-      );
-    }
     res.json(rows[0]);
   } catch (err) {
     console.error('[instagram/inbox:send]', err.message);
@@ -77,6 +97,11 @@ router.post('/instagram/inbox/:conversationId/messages', async (req, res) => {
 // Update conversation status / assignee
 router.patch('/instagram/inbox/:conversationId', async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id;
+    if (!workspaceId) return res.status(404).json({ error: 'Conversation not found' });
+    const convo = await getOwnedConversation(req.params.conversationId, workspaceId);
+    if (!convo) return res.status(404).json({ error: 'Conversation not found' });
+
     const { status, assigneeId } = req.body;
     const fields = [];
     const values = [];
@@ -100,14 +125,13 @@ router.patch('/instagram/inbox/:conversationId', async (req, res) => {
 // Notes for a conversation's contact
 router.get('/instagram/inbox/:conversationId/notes', async (req, res) => {
   try {
-    const convo = await pool.query(
-      `SELECT contact_id FROM coexistence.instagram_conversations WHERE id = $1`,
-      [req.params.conversationId]
-    );
-    if (!convo.rows[0]) return res.json([]);
+    const workspaceId = req.workspace?.id;
+    if (!workspaceId) return res.json([]);
+    const convo = await getOwnedConversation(req.params.conversationId, workspaceId);
+    if (!convo) return res.json([]);
     const { rows } = await pool.query(
       `SELECT * FROM coexistence.instagram_notes WHERE contact_id = $1 ORDER BY created_at DESC`,
-      [convo.rows[0].contact_id]
+      [convo.contact_id]
     );
     res.json(rows);
   } catch (err) {
@@ -118,15 +142,15 @@ router.get('/instagram/inbox/:conversationId/notes', async (req, res) => {
 
 router.post('/instagram/inbox/:conversationId/notes', async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id;
+    if (!workspaceId) return res.status(404).json({ error: 'Conversation not found' });
+    const convo = await getOwnedConversation(req.params.conversationId, workspaceId);
+    if (!convo) return res.status(404).json({ error: 'Conversation not found' });
+
     const { note } = req.body;
-    const convo = await pool.query(
-      `SELECT contact_id FROM coexistence.instagram_conversations WHERE id = $1`,
-      [req.params.conversationId]
-    );
-    if (!convo.rows[0]) return res.status(404).json({ error: 'Conversation not found' });
     const { rows } = await pool.query(
       `INSERT INTO coexistence.instagram_notes (contact_id, note) VALUES ($1, $2) RETURNING *`,
-      [convo.rows[0].contact_id, note]
+      [convo.contact_id, note]
     );
     res.json(rows[0]);
   } catch (err) {
@@ -137,17 +161,21 @@ router.post('/instagram/inbox/:conversationId/notes', async (req, res) => {
 
 // TEMPORARY dev helper — seed a test conversation so the UI has something
 // to show before real Meta integration exists. Safe to remove in Phase 2.
+// Scoped to the requesting workspace so seeded data doesn't leak into (or
+// pollute) any other tenant's inbox.
 router.post('/instagram/inbox/seed-test', async (req, res) => {
   try {
+    const workspaceId = req.workspace?.id;
+    if (!workspaceId) return res.status(409).json({ error: 'No workspace found for this account. Please contact support.' });
     const { username, displayName, message } = req.body;
     const contact = await pool.query(
-      `INSERT INTO coexistence.instagram_contacts (ig_user_id, username, display_name, last_message)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [`test_${Date.now()}`, username || 'test_user', displayName || 'Test User', message || 'Hello!']
+      `INSERT INTO coexistence.instagram_contacts (ig_user_id, username, display_name, last_message, workspace_id)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [`test_${Date.now()}`, username || 'test_user', displayName || 'Test User', message || 'Hello!', workspaceId]
     );
     const conversation = await pool.query(
-      `INSERT INTO coexistence.instagram_conversations (contact_id, status) VALUES ($1, 'open') RETURNING *`,
-      [contact.rows[0].id]
+      `INSERT INTO coexistence.instagram_conversations (contact_id, status, workspace_id) VALUES ($1, 'open', $2) RETURNING *`,
+      [contact.rows[0].id, workspaceId]
     );
     await pool.query(
       `INSERT INTO coexistence.instagram_messages (conversation_id, direction, content, status)
@@ -162,7 +190,3 @@ router.post('/instagram/inbox/seed-test', async (req, res) => {
 });
 
 module.exports = { router };
-
-
-
-

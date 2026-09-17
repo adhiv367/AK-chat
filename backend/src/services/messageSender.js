@@ -23,15 +23,28 @@ function localMessageId() {
 /**
  * Resolve credentials for a sender. Accepts either an explicit accountId or a
  * fromPhoneNumber. Returns { account, error } — never throws.
+ *
+ * @param {object} params
+ * @param {number|string} [params.accountId]
+ * @param {string} [params.fromPhoneNumber]
+ * @param {number|string|null} [params.workspaceId] - when provided (any
+ *   authenticated, workspace-scoped caller), resolution is restricted to
+ *   that workspace's accounts, and the fallback-to-default account (below)
+ *   only considers that workspace too. Never omit this from customer-facing
+ *   routes — omitting it is only correct for callers that don't have a
+ *   request/workspace context (e.g. the public Meta webhook, which already
+ *   knows the exact phone_number_id and needs no further scoping).
  */
-async function resolveAccount({ accountId, fromPhoneNumber }) {
+async function resolveAccount({ accountId, fromPhoneNumber, workspaceId = null }) {
   try {
     let acc = null;
-    if (accountId) acc = await getAccountWithToken(accountId);
-    else if (fromPhoneNumber) acc = await getAccountByPhoneNumber(fromPhoneNumber);
-    // Single-account product: if matching by id/phone found nothing (e.g. the
-    // display number isn't resolved from Meta yet), fall back to the lone account.
-    if (!acc) acc = await getSingleAccount();
+    if (accountId) acc = await getAccountWithToken(accountId, workspaceId);
+    else if (fromPhoneNumber) acc = await getAccountByPhoneNumber(fromPhoneNumber, workspaceId);
+    // Fallback: if matching by id/phone found nothing (e.g. the display
+    // number isn't resolved from Meta yet), fall back to the workspace's
+    // default account (or, with no workspace context, the system-wide
+    // default — legacy behaviour for background jobs, see getSingleAccount).
+    if (!acc) acc = await getSingleAccount(workspaceId);
     if (!acc) return { error: `No WhatsApp Business account registered for ${fromPhoneNumber || `id=${accountId}`}` };
     if (!acc.isActive) return { error: `WhatsApp Business account "${acc.displayName}" is inactive` };
     if (!acc.accessToken) return { error: 'Access token missing (re-enter in Settings)' };
@@ -73,28 +86,76 @@ async function insertPendingRow({ account, toNumber, messageType, messageBody, m
 
 /**
  * Mark a previously-inserted row as accepted by Meta, swapping in the real wamid.
+ *
+ * Phase 8A: accepts an optional `workspaceId` parameter for forward
+ * compatibility with callers that resolve it here rather than separately.
+ * This function deliberately does NOT perform any usage metering itself
+ * (single responsibility: message status only) — the actual increment is
+ * performed by the caller (queue/sendQueue.js's single call site), using
+ * its own already-resolved `account.workspaceId` and this function's
+ * return value. Existing callers that omit the third argument are
+ * completely unaffected.
+ *
+ * Returns `true` if a row was actually updated, `false` otherwise (e.g. a
+ * second call with an already-swapped localId matches zero rows, since
+ * `message_id` no longer equals `localId` after the first successful
+ * update — this is the natural idempotency guarantee a caller can rely on
+ * to avoid double-counting a retried/duplicate call). Existing callers that
+ * don't inspect the return value behave exactly as before.
  */
-async function markSent(localId, wamid) {
-  await pool.query(
+async function markSent(localId, wamid, workspaceId = null) {
+  const { rowCount } = await pool.query(
     `UPDATE coexistence.chat_history
         SET message_id = $1, status = 'sent', error_message = NULL
       WHERE message_id = $2`,
     [wamid, localId]
   );
+  return rowCount > 0;
 }
+/**
+ * Coerce whatever markFailed()/broadcast-log writers receive (a plain string,
+ * an Error, or an Error carrying Meta's structured `metaError` — see
+ * integrations/metaSend.js's postJson) into a safe, storable string.
+ *
+ * NEVER assumes the input is a string — sendQueue.js's worker 'failed'
+ * handler passes the actual Error object so structured Meta details
+ * (code / error_subcode / message / error_data / fbtrace_id) aren't lost,
+ * and calling .slice() directly on that Error (rather than on a string
+ * derived from it) is exactly what used to throw and swallow the failure.
+ */
+function toErrorMessage(errorMessage) {
+  if (errorMessage == null) return 'send failed';
+  if (typeof errorMessage === 'string') return errorMessage || 'send failed';
 
+  if (errorMessage instanceof Error || typeof errorMessage === 'object') {
+    const meta = errorMessage.metaError || errorMessage.error || null;
+    if (meta) {
+      const parts = [];
+      if (meta.message) parts.push(meta.message);
+      if (meta.code != null) parts.push(`code=${meta.code}`);
+      if (meta.error_subcode != null) parts.push(`subcode=${meta.error_subcode}`);
+      const details = meta.error_data?.details;
+      if (details) parts.push(`details=${details}`);
+      if (meta.fbtrace_id) parts.push(`fbtrace_id=${meta.fbtrace_id}`);
+      if (parts.length) return parts.join(' | ');
+    }
+    return errorMessage.message || String(errorMessage) || 'send failed';
+  }
+  return String(errorMessage) || 'send failed';
+}
 /**
  * Mark a row as failed (Meta rejected, network error, etc).
+ * Accepts either a plain string or an Error object (see toErrorMessage above).
  */
 async function markFailed(localId, errorMessage) {
+  const msg = toErrorMessage(errorMessage);
   await pool.query(
     `UPDATE coexistence.chat_history
         SET status = 'failed', error_message = $1
       WHERE message_id = $2`,
-    [(errorMessage || 'send failed').slice(0, 500), localId]
+    [msg.slice(0, 500), localId]
   );
 }
-
 /**
  * Return seconds-since the last incoming message from `contactNumber` to
  * `accountPhoneNumberId`. Returns null if no inbound message exists.
@@ -113,7 +174,16 @@ async function secondsSinceLastIncoming({ accountPhoneNumberId, contactNumber })
   const s = rows[0]?.seconds;
   return s != null ? Math.floor(s) : null;
 }
-
+/**
+ * Format a send-failure error (Meta API error object, network Error, etc)
+ * into a short, storable string for broadcast_logs.error_message. Used by
+ * queue/sendQueue.js's worker 'failed' handler when the origin is a
+ * broadcast log row. Kept separate from markFailed's own string coercion
+ * since callers here already have the raw Error/Meta-error object.
+ */
+function formatSendError(err) {
+  return toErrorMessage(err);
+}
 module.exports = {
   resolveAccount,
   insertPendingRow,
@@ -121,4 +191,9 @@ module.exports = {
   markFailed,
   secondsSinceLastIncoming,
   localMessageId,
+  formatSendError,
+  toErrorMessage,
 };
+
+
+

@@ -15,6 +15,10 @@
 const { Router } = require('express');
 const pool = require('../db');
 const { isAdmin } = require('../permissions');
+// Phase 4F — Workspace Dashboard. Reuses the existing WhatsApp account
+// shaping logic (connectionState derivation) rather than re-deriving it —
+// same function whatsappOnboardingStatus.js already reuses this way.
+const { publicShape } = require('./whatsappAccounts');
 
 const router = Router();
 
@@ -29,18 +33,19 @@ const LEAD_SOURCE_CATEGORY = process.env.LEAD_SOURCE_CATEGORY || 'Lead Source';
 //   kind 'contacts' → filters on the contacts alias `c`
 //   kind 'chat'     → filters on the chat_history alias `ch` (and EXISTS
 //                      against contacts for the per-user check)
-// `wa` is the single connected WhatsApp number — this product handles exactly
-// one account, so every aggregate is restricted to it; without it the
-// dashboard would also count orphaned rows from a previously-connected number.
+// `wa` is the list of the current workspace's connected WhatsApp numbers —
+// a workspace may now have multiple accounts, so every aggregate is
+// restricted to ANY of them; without it the dashboard would also count
+// orphaned rows from another workspace's number, or a previously-connected one.
 function applyScope(sql, params, { admin, uid, kind, wa }) {
   const out = [...params];
   let clause = '';
 
-  // Connected-account filter (both roles). No account → show nothing.
-  if (wa) {
+  // Connected-account filter (both roles). No accounts → show nothing.
+  if (wa && wa.length > 0) {
     out.push(wa);
     const wp = `$${out.length}`;
-    clause += kind === 'contacts' ? ` AND c.wa_number = ${wp}` : ` AND ch.wa_number = ${wp}`;
+    clause += kind === 'contacts' ? ` AND c.wa_number = ANY(${wp}::text[])` : ` AND ch.wa_number = ANY(${wp}::text[])`;
   } else {
     clause += ' AND FALSE';
   }
@@ -60,14 +65,18 @@ function applyScope(sql, params, { admin, uid, kind, wa }) {
   return { sql: sql.split('/*SCOPE*/').join(clause), params: out };
 }
 
-// Resolve the single connected WhatsApp number (digits only), or null.
-// Mirrors getSingleAccount()'s ordering in routes/whatsappAccounts.js.
-async function getConnectedWa() {
+// Resolve every connected WhatsApp number (digits only) for a workspace.
+// Multi-account: a workspace can now have several numbers, all of which
+// count toward its dashboard totals.
+async function getConnectedWaNumbers(workspaceId) {
+  if (!workspaceId) return [];
   const { rows } = await pool.query(
     `SELECT display_phone_number AS wa FROM coexistence.whatsapp_accounts
-      ORDER BY is_default DESC, id ASC LIMIT 1`
+      WHERE workspace_id = $1
+      ORDER BY is_default DESC, id ASC`,
+    [workspaceId]
   );
-  return (rows[0]?.wa || '').replace(/\D/g, '') || null;
+  return rows.map(r => (r.wa || '').replace(/\D/g, '')).filter(Boolean);
 }
 
 // pct change vs previous period; null when there's no baseline to compare to.
@@ -80,9 +89,15 @@ router.get('/dashboard', async (req, res) => {
   try {
     const admin = isAdmin(req.user);
     const uid = req.user.id;
+    // workspaceId always comes from req.workspace.id (attachWorkspace,
+    // mounted globally in index.js) — never from the client. Every
+    // workspace-owned aggregate below (automations, broadcasts, templates,
+    // WhatsApp accounts) is filtered by it; a missing workspace fails
+    // closed to empty/zeroed sections rather than running unscoped.
+    const workspaceId = req.workspace?.id ?? null;
     const range = RANGE_DAYS[req.query.range] ? req.query.range : '7d';
     const days = RANGE_DAYS[range];
-    const connectedWa = await getConnectedWa();
+    const connectedWa = await getConnectedWaNumbers(req.workspace?.id);
 
     // Helper: run a scoped query (restricted to the connected account).
     const q = async (sql, params, kind) => {
@@ -94,10 +109,18 @@ router.get('/dashboard', async (req, res) => {
     // Resolve the "Lead Source" category id (case-insensitive). A "lead" is a
     // contact tagged under this category — drives the New Leads + Open
     // Conversations cards.
-    const { rows: lsRows } = await pool.query(
-      `SELECT id FROM coexistence.categories WHERE LOWER(name) = LOWER($1) ORDER BY created_at LIMIT 1`,
-      [LEAD_SOURCE_CATEGORY]
-    );
+    // Phase 7.13B fix (7.13A-2): coexistence.categories is a workspace-owned
+    // table (see routes/categories.js) — without workspace_id scoping this
+    // could resolve to a different workspace's "Lead Source" category if one
+    // happens to exist with the same name, silently mis-attributing the KPI.
+    // A workspace with no resolved workspace yet gets leadSourceCatId = null
+    // (fails closed) rather than matching across tenants.
+    const { rows: lsRows } = workspaceId
+      ? await pool.query(
+          `SELECT id FROM coexistence.categories WHERE LOWER(name) = LOWER($1) AND workspace_id = $2 ORDER BY created_at LIMIT 1`,
+          [LEAD_SOURCE_CATEGORY, workspaceId]
+        )
+      : { rows: [] };
     const leadSourceCatId = lsRows[0]?.id || null;
 
     // ── Contacts (totals + new this/prev period) ──────────────────────
@@ -216,9 +239,18 @@ router.get('/dashboard', async (req, res) => {
          ORDER BY count DESC`,
         [funnelCategoryId], 'contacts'
       );
-      const { rows: catRows } = await pool.query(
-        `SELECT name FROM coexistence.categories WHERE id = $1`, [funnelCategoryId]
-      );
+      // Phase 7.13B fix (7.13A-1): coexistence.categories is workspace-owned
+      // (routes/categories.js always scopes it) — without workspace_id here,
+      // a client-supplied ?funnelCategory=<id> from another workspace would
+      // resolve to that other workspace's category name (cross-tenant
+      // metadata leak). Scoped by workspaceId so a foreign/nonexistent id
+      // now resolves to categoryName: null, same as any other not-found id.
+      const { rows: catRows } = workspaceId
+        ? await pool.query(
+            `SELECT name FROM coexistence.categories WHERE id = $1 AND workspace_id = $2`,
+            [funnelCategoryId, workspaceId]
+          )
+        : { rows: [] };
       funnel = {
         categoryId: funnelCategoryId,
         categoryName: catRows[0]?.name || null,
@@ -226,10 +258,16 @@ router.get('/dashboard', async (req, res) => {
         total: stages.reduce((s, r) => s + r.count, 0),
       };
     }
-    // All categories for a future selector
-    const { rows: allCats } = await pool.query(
-      `SELECT id, name FROM coexistence.categories ORDER BY name`
-    );
+    // All categories for a future selector.
+    // Phase 7.13B fix (7.13A-1): must be scoped to this workspace only —
+    // previously returned every workspace's category ids/names (cross-tenant
+    // metadata leak), matching the same fix applied to categoryName above.
+    const { rows: allCats } = workspaceId
+      ? await pool.query(
+          `SELECT id, name FROM coexistence.categories WHERE workspace_id = $1 ORDER BY name`,
+          [workspaceId]
+        )
+      : { rows: [] };
     funnel.categories = allCats;
 
     // ── Tag distribution (top 8 across visible contacts) ──────────────
@@ -283,24 +321,40 @@ router.get('/dashboard', async (req, res) => {
     ];
 
     // Admin/BDA sections + 6th KPI
-    let automations = null, broadcasts = null;
+    let automations = null, broadcasts = null, workspaceSummary = null;
     const alerts = [];
 
     if (admin) {
-      const [autoCounts] = (await pool.query(
-        `SELECT count(*) FILTER (WHERE status='active')::int AS active,
-                count(*)::int AS total
-         FROM coexistence.chatbots`
-      )).rows;
-      const [runRow] = (await pool.query(
-        `SELECT count(*)::int AS total,
-                count(*) FILTER (WHERE status='success')::int AS success,
-                count(*) FILTER (WHERE status='error')::int AS error,
-                count(*) FILTER (WHERE status='paused')::int AS paused
-         FROM coexistence.automation_executions
-         WHERE started_at >= NOW() - ($1 * INTERVAL '1 day')`,
-        [days]
-      )).rows;
+      // Every query below is workspace-scoped from workspaceId (never the
+      // client). No workspace resolved for this session -> fail closed:
+      // skip every admin query entirely and report zeroed/empty sections,
+      // rather than running any of them unscoped.
+      const [autoCounts] = workspaceId
+        ? (await pool.query(
+            `SELECT count(*) FILTER (WHERE status='active')::int AS active,
+                    count(*)::int AS total
+             FROM coexistence.chatbots
+             WHERE workspace_id = $1`,
+            [workspaceId]
+          )).rows
+        : [{ active: 0, total: 0 }];
+      // automation_executions has no workspace_id of its own — ownership is
+      // derived by joining to its parent chatbot's workspace_id via
+      // automation_id -> chatbots.id (same relationship already used by
+      // routes/chatbots.js), so cross-workspace runs never get counted.
+      const [runRow] = workspaceId
+        ? (await pool.query(
+            `SELECT count(*)::int AS total,
+                    count(*) FILTER (WHERE e.status='success')::int AS success,
+                    count(*) FILTER (WHERE e.status='error')::int AS error,
+                    count(*) FILTER (WHERE e.status='paused')::int AS paused
+             FROM coexistence.automation_executions e
+             JOIN coexistence.chatbots c ON c.id = e.automation_id
+             WHERE e.started_at >= NOW() - ($1 * INTERVAL '1 day')
+               AND c.workspace_id = $2`,
+            [days, workspaceId]
+          )).rows
+        : [{ total: 0, success: 0, error: 0, paused: 0 }];
       automations = {
         active: autoCounts.active, total: autoCounts.total,
         runs: runRow,
@@ -312,44 +366,220 @@ router.get('/dashboard', async (req, res) => {
         tooltip: 'Automation flows currently enabled (status = active).',
       });
 
-      // Broadcasts summary + recent
-      const [bcSummary] = (await pool.query(
-        `SELECT count(*)::int AS campaigns
-         FROM coexistence.broadcasts
-         WHERE created_at >= NOW() - ($1 * INTERVAL '1 day')`,
-        [days]
-      )).rows;
-      const recent = (await pool.query(
-        `SELECT b.id, b.name, b.message_type AS "messageType", b.status,
-                b.created_at AS "createdAt",
-                count(*) FILTER (WHERE l.action='BROADCAST')::int AS recipients,
-                count(*) FILTER (WHERE l.action='BROADCAST' AND l.status='SENT')::int AS sent,
-                count(*) FILTER (WHERE l.action='BROADCAST' AND l.status='FAILED')::int AS failed
-         FROM coexistence.broadcasts b
-         LEFT JOIN coexistence.broadcast_logs l ON l.broadcast_id = b.id
-         GROUP BY b.id
-         ORDER BY b.created_at DESC
-         LIMIT 5`
-      )).rows;
+      // Broadcasts summary + recent. broadcast_logs has no workspace_id of
+      // its own — ownership is derived by joining to its parent broadcast's
+      // workspace_id via broadcast_id -> broadcasts.id, per instruction #6.
+      const [bcSummary] = workspaceId
+        ? (await pool.query(
+            `SELECT count(*)::int AS campaigns
+             FROM coexistence.broadcasts
+             WHERE created_at >= NOW() - ($1 * INTERVAL '1 day')
+               AND workspace_id = $2`,
+            [days, workspaceId]
+          )).rows
+        : [{ campaigns: 0 }];
+      const recent = workspaceId
+        ? (await pool.query(
+            `SELECT b.id, b.name, b.message_type AS "messageType", b.status,
+                    b.created_at AS "createdAt",
+                    count(*) FILTER (WHERE l.action='BROADCAST')::int AS recipients,
+                    count(*) FILTER (WHERE l.action='BROADCAST' AND l.status='SENT')::int AS sent,
+                    count(*) FILTER (WHERE l.action='BROADCAST' AND l.status='FAILED')::int AS failed
+             FROM coexistence.broadcasts b
+             LEFT JOIN coexistence.broadcast_logs l ON l.broadcast_id = b.id
+             WHERE b.workspace_id = $1
+             GROUP BY b.id
+             ORDER BY b.created_at DESC
+             LIMIT 5`,
+            [workspaceId]
+          )).rows
+        : [];
       broadcasts = { campaigns: bcSummary.campaigns, recent };
 
       // Alerts (admin operational health)
-      const [tpl] = (await pool.query(
+      const [tpl] = workspaceId
+        ? (await pool.query(
         `SELECT count(*) FILTER (WHERE status='REJECTED')::int AS rejected,
                 count(*) FILTER (WHERE status='PAUSED')::int AS paused,
                 count(*) FILTER (WHERE status='SUBMITTED')::int AS pending,
                 count(*) FILTER (WHERE quality_score='RED')::int AS low_quality
-         FROM coexistence.message_templates`
-      )).rows;
+         FROM coexistence.message_templates
+         WHERE workspace_id = $1`,
+            [workspaceId]
+          )).rows
+        : [{ rejected: 0, paused: 0, pending: 0, low_quality: 0 }];
       if (tpl.rejected > 0) alerts.push({ level: 'warn', label: 'Templates rejected', count: tpl.rejected, page: 'template-builder' });
       if (tpl.paused > 0) alerts.push({ level: 'warn', label: 'Templates paused', count: tpl.paused, page: 'template-builder' });
       if (tpl.low_quality > 0) alerts.push({ level: 'warn', label: 'Low-quality templates', count: tpl.low_quality, page: 'template-builder' });
       if (tpl.pending > 0) alerts.push({ level: 'info', label: 'Templates pending review', count: tpl.pending, page: 'template-builder' });
       if (runRow.error > 0) alerts.push({ level: 'warn', label: 'Failed automation runs', count: runRow.error, page: 'chatbot-builder' });
-      const [waba] = (await pool.query(
-        `SELECT count(*) FILTER (WHERE NOT is_active)::int AS inactive FROM coexistence.whatsapp_accounts`
-      )).rows;
+      const [waba] = workspaceId
+        ? (await pool.query(
+        `SELECT count(*) FILTER (WHERE NOT is_active)::int AS inactive FROM coexistence.whatsapp_accounts WHERE workspace_id = $1`,
+            [workspaceId]
+          )).rows
+        : [{ inactive: 0 }];
       if (waba.inactive > 0) alerts.push({ level: 'warn', label: 'Inactive WhatsApp accounts', count: waba.inactive, page: 'admin-settings' });
+
+      // ── Phase 4F — Workspace Dashboard summary ────────────────────────
+      // Purely additive `workspace` section on the response. Every query is
+      // scoped by workspaceId, resolved server-side by attachWorkspace
+      // (middleware/workspaceContext.js) and NEVER accepted from the
+      // client — identical rule to every other admin-only query above.
+      // Reuses existing tables only: workspace_members (team count),
+      // whatsapp_accounts (via the same publicShape()/connectionState this
+      // codebase already uses for the onboarding-status endpoint),
+      // contacts/chat_history (already computed above as contactRow/
+      // openRow/msgRow), broadcasts, chatbots + automation_executions.
+      // No new tables, no new routes, no duplicate scoping logic.
+      if (workspaceId) {
+        // Phase 4G: count both active members and pending invitations
+        // (workspace_members.status — 'active' from Phase 1, 'pending' from
+        // the Phase 4D invite flow, see routes/invitations.js). "Invited/
+        // configured" is true the moment an admin has done EITHER — invited
+        // someone (pending) or already has a second active member — without
+        // requiring the pending invite to be accepted first.
+        const [{ active_count: memberCount, pending_count: pendingInvites }] = (await pool.query(
+          `SELECT
+             count(*) FILTER (WHERE status = 'active')::int AS active_count,
+             count(*) FILTER (WHERE status = 'pending')::int AS pending_count
+           FROM coexistence.workspace_members
+          WHERE workspace_id = $1`,
+          [workspaceId]
+        )).rows;
+
+        const { rows: waRows } = await pool.query(
+          `SELECT * FROM coexistence.whatsapp_accounts
+             WHERE workspace_id = $1
+             ORDER BY is_default DESC, id ASC`,
+          [workspaceId]
+        );
+        const waAccounts = waRows.map(r => {
+          const shaped = publicShape(r);
+          return {
+            id: shaped.id,
+            displayPhoneNumber: shaped.displayPhoneNumber,
+            isDefault: shaped.isDefault,
+            connectionState: shaped.connectionState,
+          };
+        });
+        const waActive = waAccounts.filter(
+          a => a.connectionState === 'healthy' || a.connectionState === 'unverified'
+        ).length;
+
+        const [{ count: broadcastsTotal }] = (await pool.query(
+          `SELECT count(*)::int AS count FROM coexistence.broadcasts WHERE workspace_id = $1`,
+          [workspaceId]
+        )).rows;
+
+        // Recent activity: merge the most recent messages, broadcasts, and
+        // automation runs for this workspace into one timeline. Each
+        // sub-query reuses the same workspace-scoping already used above
+        // (connectedWa for chat_history; workspace_id for broadcasts /
+        // automation_executions via their parent chatbot).
+        const recentMessages = connectedWa.length > 0
+          ? (await pool.query(
+              `SELECT ch.direction, ch.timestamp,
+                      COALESCE(NULLIF(c.name,''), NULLIF(c.profile_name,''), ch.contact_number) AS contact
+                 FROM coexistence.chat_history ch
+                 LEFT JOIN coexistence.contacts c
+                   ON c.wa_number = ch.wa_number AND c.contact_number = ch.contact_number
+                WHERE ch.wa_number = ANY($1::text[])
+                ORDER BY ch.timestamp DESC LIMIT 5`,
+              [connectedWa]
+            )).rows
+          : [];
+        const { rows: recentBroadcasts } = await pool.query(
+          `SELECT id, name, status, created_at AS "createdAt"
+             FROM coexistence.broadcasts
+            WHERE workspace_id = $1
+            ORDER BY created_at DESC LIMIT 5`,
+          [workspaceId]
+        );
+        const { rows: recentRuns } = await pool.query(
+          `SELECT e.status, e.started_at AS "startedAt", c.name AS "automationName"
+             FROM coexistence.automation_executions e
+             JOIN coexistence.chatbots c ON c.id = e.automation_id
+            WHERE c.workspace_id = $1
+            ORDER BY e.started_at DESC LIMIT 5`,
+          [workspaceId]
+        );
+
+        const recentActivity = [
+          ...recentMessages.map(m => ({
+            type: 'message',
+            label: m.direction === 'outgoing' ? `Message sent to ${m.contact}` : `Message received from ${m.contact}`,
+            at: m.timestamp,
+          })),
+          ...recentBroadcasts.map(b => ({
+            type: 'broadcast',
+            label: `Campaign "${b.name || `#${b.id}`}" ${(b.status || '').toLowerCase()}`.trim(),
+            at: b.createdAt,
+          })),
+          ...recentRuns.map(r => ({
+            type: 'automation',
+            label: `Automation "${r.automationName}" ${r.status}`,
+            at: r.startedAt,
+          })),
+        ]
+          .filter(a => a.at)
+          .sort((a, b) => new Date(b.at) - new Date(a.at))
+          .slice(0, 10);
+
+        workspaceSummary = {
+          id: workspaceId,
+          name: req.workspace?.name || null,
+          businessName: req.workspace?.businessName || null,
+          memberCount,
+          contactsTotal: contactRow.total,
+          conversationsOpen: openRow.open_convos,
+          messagesSent: msgRow.sent,
+          broadcastsTotal,
+          automationsTotal: autoCounts.total,
+          whatsapp: { total: waAccounts.length, active: waActive, accounts: waAccounts },
+          recentActivity,
+          // Phase 4G — Workspace Setup Completion / Readiness. Reuses only
+          // data already resolved above (workspace_members counts,
+          // waActive, req.workspace's Phase 4E business fields) — no new
+          // tables or queries beyond the member-count one just added.
+          // `steps` is the single source of truth for both the checklist
+          // UI and the completion percentage, so the two can never drift.
+          // Kept alongside the original Phase 4F boolean fields
+          // (businessInfoComplete/whatsappConnected/teamInvited) for
+          // backward compatibility with anything already reading them.
+          readiness: (() => {
+            const businessInfoComplete = !!(req.workspace?.businessName && req.workspace?.timezone);
+            const whatsappConnected = waActive > 0;
+            const teamConfigured = memberCount > 1 || pendingInvites > 0;
+            const steps = [
+              { key: 'workspaceCreated', label: 'Workspace created', complete: true, action: null },
+              {
+                key: 'businessInfo', label: 'Business information', complete: businessInfoComplete,
+                action: businessInfoComplete ? null : { label: 'Complete business information', page: 'admin-settings', tab: 'workspace' },
+              },
+              {
+                key: 'whatsapp', label: 'WhatsApp connected', complete: whatsappConnected,
+                action: whatsappConnected ? null : { label: 'Connect WhatsApp', page: 'admin-settings', tab: 'whatsapp-accounts' },
+              },
+              {
+                key: 'team', label: 'Invite/configure team', complete: teamConfigured,
+                action: teamConfigured ? null : { label: 'Invite team member', page: 'admin-settings', tab: 'workspace' },
+              },
+            ];
+            const percent = Math.round((steps.filter(s => s.complete).length / steps.length) * 100);
+            return {
+              // Legacy Phase 4F fields — unchanged shape/meaning.
+              onboardingCompleted: !!req.workspace?.onboardingCompleted,
+              businessInfoComplete,
+              whatsappConnected,
+              teamInvited: teamConfigured,
+              // New Phase 4G fields.
+              steps,
+              percent,
+            };
+          })(),
+        };
+      }
     } else {
       // BDA 6th KPI: their active conversations
       kpis.push({
@@ -372,6 +602,7 @@ router.get('/dashboard', async (req, res) => {
       automations,
       broadcasts,
       alerts,
+      workspace: workspaceSummary,
     });
   } catch (err) {
     console.error('[dashboard] error:', err.message);
@@ -388,21 +619,29 @@ router.get('/dashboard/details', async (req, res) => {
   try {
     const admin = isAdmin(req.user);
     const uid = req.user.id;
+    // workspaceId always comes from req.workspace.id, never the client —
+    // used to scope the 'automations' metric below the same way as the
+    // main /dashboard admin block.
+    const workspaceId = req.workspace?.id ?? null;
     const range = RANGE_DAYS[req.query.range] ? req.query.range : '7d';
     const days = RANGE_DAYS[range];
     const metric = String(req.query.metric || '');
     const LIMIT = 300;
 
-    const connectedWa = await getConnectedWa();
+    const connectedWa = await getConnectedWaNumbers(req.workspace?.id);
     const q = async (sql, params, kind) => {
       const built = applyScope(sql, params, { admin, uid, kind, wa: connectedWa });
       const { rows } = await pool.query(built.sql, built.params);
       return rows;
     };
+    // Phase 7.13B fix (7.13A-2): same workspace scoping as the main
+    // /dashboard handler's "Lead Source" resolution above — see that
+    // comment for rationale. Fails closed (null) with no workspace.
     const leadCat = async () => {
+      if (!workspaceId) return null;
       const { rows } = await pool.query(
-        `SELECT id FROM coexistence.categories WHERE LOWER(name) = LOWER($1) ORDER BY created_at LIMIT 1`,
-        [LEAD_SOURCE_CATEGORY]
+        `SELECT id FROM coexistence.categories WHERE LOWER(name) = LOWER($1) AND workspace_id = $2 ORDER BY created_at LIMIT 1`,
+        [LEAD_SOURCE_CATEGORY, workspaceId]
       );
       return rows[0]?.id || null;
     };
@@ -523,12 +762,13 @@ router.get('/dashboard/details', async (req, res) => {
       }
       case 'automations': {
         title = 'Active automations';
-        if (admin) {
+        if (admin && workspaceId) {
           items = (await pool.query(
             `SELECT name AS primary, ('trigger: ' || trigger_type) AS secondary, status AS meta
                FROM coexistence.chatbots
-              WHERE status='active'
-              ORDER BY updated_at DESC LIMIT ${LIMIT}`
+              WHERE status='active' AND workspace_id = $1
+              ORDER BY updated_at DESC LIMIT ${LIMIT}`,
+            [workspaceId]
           )).rows;
         }
         break;

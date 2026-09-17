@@ -23,7 +23,6 @@ test('adminOnly calls next() for an admin user', () => {
   assert.equal(nexted, true);
   assert.equal(res.statusCode, null, 'must not write a response for admins');
 });
-
 test('adminOnly rejects a non-admin with 403', () => {
   for (const role of ['bda_sales', 'viewer', undefined]) {
     const req = { user: { id: 2, role } };

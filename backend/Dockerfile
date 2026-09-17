@@ -11,7 +11,7 @@ RUN npm install --omit=dev
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 
-ENV NODE_ENV=production
+ENV NODE_ENV=development
 EXPOSE 3003
 
 CMD ["node", "src/index.js"]

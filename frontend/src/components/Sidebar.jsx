@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   LayoutGrid, Zap, LayoutTemplate, MessageCircle, Users,
   Megaphone, Image as ImageIcon, KanbanSquare, Target,
-  ChevronLeft, ChevronRight, Repeat, TrendingUp,
+  ChevronLeft, ChevronRight, Repeat, TrendingUp, Bot,
 } from 'lucide-react';
 import { C, DISPLAY_FONT, FONT } from '../constants.js';
 
@@ -31,6 +31,7 @@ const NAV_GROUPS = [
     label: 'Automate',
     items: [
       { id: 'chatbot-builder', label: 'Workflow Studio', Icon: Zap },
+      { id: 'ai-agent-builder', label: 'AI Agent', Icon: Bot },
       { id: 'template-builder', label: 'Template Studio', Icon: LayoutTemplate },
       { id: 'bulk-message', label: 'Broadcast Studio', Icon: Megaphone },
       { id: 'target-message', label: 'Precision Targeting', Icon: Target },

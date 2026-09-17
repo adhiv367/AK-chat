@@ -24,6 +24,60 @@
 const pool = require('../db');
 const { executeBroadcast } = require('../routes/broadcasts');
 
+// Phase 6 Part 3C — Campaign Scheduling integration.
+//
+// Campaign Studio's POST /campaigns/:id/schedule creates a normal
+// coexistence.broadcasts row with status='SCHEDULED' (source='campaign')
+// and links coexistence.campaigns.broadcast_id to it — it does NOT touch
+// this scheduler's tick logic at all. This scheduler still only ever
+// queries/locks/fires coexistence.broadcasts exactly as it always has.
+//
+// The ONE thing a scheduled CAMPAIGN needs beyond what a scheduled
+// (Broadcast Studio) broadcast needs is for coexistence.campaigns.status to
+// track along: 'scheduled' -> 'running' when this scheduler fires the
+// linked broadcast, and 'scheduled' -> 'failed' if firing it errors. This
+// helper is the single, additive seam for that — called right after the
+// existing fire/fail branches below, never in the tick/lock logic itself.
+//
+// Conditional + idempotent by construction:
+//   - `WHERE broadcast_id = $1 AND status = 'scheduled'` means a plain
+//     Broadcast Studio broadcast (no campaign ever points at it) always
+//     matches zero rows here — completely inert for non-campaign sends.
+//   - A campaign already moved off 'scheduled' (e.g. cancelled via
+//     POST /campaigns/:id/cancel-schedule racing this same tick) is a
+//     no-op rowcount=0 UPDATE, never overwritten back to 'running'/'failed'.
+//   - Calling this twice for the same broadcastId is harmless: the second
+//     call's WHERE no longer matches (status is no longer 'scheduled'), so
+//     it cannot double-transition or re-fire anything — no campaign-level
+//     send/enqueue happens here, only a status label sync onto a broadcast
+//     that executeBroadcast() (or its failure path) already fired exactly
+//     once, per the SKIP LOCKED guarantee below.
+async function syncLinkedCampaignStatus(broadcastId, { failed = false } = {}) {
+  try {
+    if (failed) {
+      await pool.query(
+        `UPDATE coexistence.campaigns
+            SET status = 'failed'
+          WHERE broadcast_id = $1 AND status = 'scheduled'`,
+        [broadcastId]
+      );
+    } else {
+      await pool.query(
+        `UPDATE coexistence.campaigns
+            SET status = 'running', started_at = COALESCE(started_at, NOW())
+          WHERE broadcast_id = $1 AND status = 'scheduled'`,
+        [broadcastId]
+      );
+    }
+  } catch (err) {
+    // Never let a campaign-status sync failure affect the broadcast send
+    // itself (already completed/failed by this point) or crash the
+    // scheduler tick — just log it, same posture as the existing
+    // FAILED-marking catch below.
+    console.error(`[scheduler] Could not sync campaign status for broadcast ${broadcastId}:`, err.message);
+  }
+}
+
 // Check every 60 seconds
 const POLL_INTERVAL_MS = 60 * 1000;
 
@@ -86,6 +140,9 @@ async function runSchedulerTick() {
           console.log(`[scheduler] Firing broadcast ${b.id} — "${b.name || 'unnamed'}" (was scheduled for ${b.scheduled_at})`);
           const enqueued = await executeBroadcast(b.id);
           console.log(`[scheduler] ✓ Broadcast "${b.name || b.id}" sent — ${enqueued} recipients enqueued`);
+          // Phase 6 Part 3C: no-op for plain Broadcast Studio broadcasts —
+          // see syncLinkedCampaignStatus's doc comment above.
+          await syncLinkedCampaignStatus(b.id, { failed: false });
         } catch (err) {
           console.error(`[scheduler] ✗ Broadcast "${b.name || b.id}" FAILED:`, err.message);
           // Mark as FAILED in DB so the UI shows an error badge
@@ -99,6 +156,7 @@ async function runSchedulerTick() {
           } catch (dbErr) {
             console.error(`[scheduler] Could not mark broadcast ${b.id} as FAILED:`, dbErr.message);
           }
+          await syncLinkedCampaignStatus(b.id, { failed: true });
         } finally {
           inProgress.delete(b.id);
         }
@@ -158,4 +216,4 @@ function stopBroadcastScheduler() {
   }
 }
 
-module.exports = { startBroadcastScheduler, stopBroadcastScheduler };
+module.exports = { startBroadcastScheduler, stopBroadcastScheduler, runSchedulerTick, syncLinkedCampaignStatus };

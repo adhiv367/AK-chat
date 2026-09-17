@@ -2,24 +2,27 @@ const { Router } = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const router = Router();
-
 // Ensure uploads directory exists
 const UPLOAD_DIR = path.join(__dirname, '../../uploads');
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
-
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    // Phase 7.11 fix (F-5): Date.now() + Math.random() is guessable/
+    // enumerable (low entropy, predictable timing component). Use
+    // crypto.randomBytes for a cryptographically secure, unpredictable
+    // filename. Extension handling, storage path, and the public
+    // Meta-fetchable /uploads/<filename> URL shape are unchanged.
+    const unique = crypto.randomBytes(32).toString('hex');
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, 'bda-' + unique + ext);
   },
 });
-
 const upload = multer({
   storage,
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
@@ -33,7 +36,6 @@ const upload = multer({
     }
   },
 });
-
 // POST /api/upload
 router.post('/upload', upload.single('file'), (req, res) => {
   try {
@@ -47,5 +49,4 @@ router.post('/upload', upload.single('file'), (req, res) => {
     res.status(500).json({ error: 'Failed to upload file' });
   }
 });
-
 module.exports = { router, UPLOAD_DIR };

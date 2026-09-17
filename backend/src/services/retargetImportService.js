@@ -14,10 +14,16 @@
 // No column-detection or phone-normalization logic is duplicated here —
 // both are imported from the Contacts modules so any future fix or new
 // alias added there automatically applies to Retarget too.
+//
+// Phase 3C-4: every function that touches the DB now takes/uses workspaceId
+// so CSV/Excel import and Google Sheet sync create/update retarget
+// customers (and their mirrored Contacts) inside the caller's own
+// workspace only. workspaceId must come from req.workspace.id (see
+// retargetImportController.js / retargetSyncController.js) — never trust
+// one supplied by the client.
 
 const ExcelJS = require('exceljs');
 const { Readable } = require('stream');
-const pool = require('../db');
 const retargetRepository = require('../repositories/retargetRepository');
 const { detectRetargetType, detectExitCategory } = require('./retargetClassifier');
 // Contacts bridge — every Retarget customer created/updated is mirrored into
@@ -36,17 +42,12 @@ const { upsertContactFromRetarget, normalizePhone } = require('./contactSyncServ
 // to Contacts.
 const { buildHeaderIndex: buildContactsHeaderIndex } = require('./googleSheetService');
 
-// Exact-match phone lookup. retargetRepository.findAll() only supports
-// ILIKE substring search, which isn't safe for dedupe (e.g. phone "919000012"
-// would match "9190000123"), so import/sync upserts query directly here.
-async function findByPhone(phone) {
-  const { rows } = await pool.query(
-    `SELECT id, name, phone, email, exit_url, retarget_type, timestamp, source, status
-       FROM coexistence.retarget_customers WHERE phone = $1 LIMIT 1`,
-    [phone]
-  );
-  return rows[0] || null;
-}
+// Exact-match phone lookup, scoped to a workspace. retargetRepository.findAll()
+// only supports ILIKE substring search, which isn't safe for dedupe (e.g.
+// phone "919000012" would match "9190000123"), so import/sync upserts use
+// retargetRepository.findByPhone instead — same layering rule as the rest
+// of this module: no direct `pool` access here, SQL lives in the repository.
+const findByPhone = retargetRepository.findByPhone;
 
 // Retarget-only columns, layered on top of Contacts' HEADER_MAP (see
 // buildHeaderIndex above). Pre-normalized keys ([a-z0-9] only) to match
@@ -122,7 +123,7 @@ function parseTimestamp(raw) {
  * - New phone -> create
  * @returns {Promise<{created?:boolean, updated?:boolean, skipped?:boolean, reason?:string}>}
  */
-async function upsertRetargetRow(row, defaultSource = 'import') {
+async function upsertRetargetRow(row, defaultSource = 'import', workspaceId) {
   const phone = normalizePhone(row.phone);
   if (!phone) return { skipped: true, reason: 'missing/invalid phone number' };
 
@@ -131,7 +132,7 @@ async function upsertRetargetRow(row, defaultSource = 'import') {
   const timestamp = parseTimestamp(row.timestamp);
   const source = row.source?.trim() || defaultSource;
 
-  const existing = await findByPhone(phone);
+  const existing = await findByPhone(phone, workspaceId);
 
   if (existing) {
     const updated = await retargetRepository.update(existing.id, {
@@ -141,8 +142,8 @@ async function upsertRetargetRow(row, defaultSource = 'import') {
       retargetType: retargetType || existing.retarget_type,
       timestamp: timestamp || existing.timestamp,
       source,
-    });
-    await syncContactSafely(updated);
+    }, workspaceId);
+    await syncContactSafely(updated, workspaceId);
     return { updated: true, record: updated };
   }
 
@@ -155,17 +156,17 @@ async function upsertRetargetRow(row, defaultSource = 'import') {
     timestamp,
     source,
     status: 'pending',
-  });
-  await syncContactSafely(created);
+  }, workspaceId);
+  await syncContactSafely(created, workspaceId);
   return { created: true, record: created };
 }
 
 // Mirrors a Retarget customer into Contacts. Never throws — a Contacts sync
 // hiccup (e.g. no WhatsApp account connected yet) must not fail the
 // Retarget import/sync run itself; it's logged and skipped instead.
-async function syncContactSafely(retargetCustomer) {
+async function syncContactSafely(retargetCustomer, workspaceId) {
   try {
-    await upsertContactFromRetarget(retargetCustomer);
+    await upsertContactFromRetarget(retargetCustomer, workspaceId);
   } catch (err) {
     console.error('[retarget] contact sync error:', err.message);
   }
@@ -177,13 +178,13 @@ async function syncContactSafely(retargetCustomer) {
  * Sync History can display them uniformly.
  * @returns {Promise<{total:number, imported:number, updated:number, skipped:number, errors:Array}>}
  */
-async function importRows(rows, defaultSource = 'import') {
+async function importRows(rows, defaultSource = 'import', workspaceId) {
   let imported = 0, updated = 0, skipped = 0;
   const errors = [];
 
   for (const row of rows) {
     try {
-      const result = await upsertRetargetRow(row, defaultSource);
+      const result = await upsertRetargetRow(row, defaultSource, workspaceId);
       if (result.created) imported++;
       else if (result.updated) updated++;
       else if (result.skipped) skipped++;
@@ -196,7 +197,7 @@ async function importRows(rows, defaultSource = 'import') {
 }
 
 // Full pipeline for a CSV/Excel upload buffer.
-async function importFromBuffer(buffer, filename, defaultSource) {
+async function importFromBuffer(buffer, filename, defaultSource, workspaceId) {
   const grid = await parseWorkbookRows(buffer, filename);
   if (grid.length < 2) {
     const err = new Error('File is empty or has no data rows');
@@ -209,7 +210,7 @@ async function importFromBuffer(buffer, filename, defaultSource) {
     err.status = 400;
     throw err;
   }
-  return importRows(rows, defaultSource || (filename.toLowerCase().endsWith('.csv') ? 'csv_import' : 'excel_import'));
+  return importRows(rows, defaultSource || (filename.toLowerCase().endsWith('.csv') ? 'csv_import' : 'excel_import'), workspaceId);
 }
 
 module.exports = {

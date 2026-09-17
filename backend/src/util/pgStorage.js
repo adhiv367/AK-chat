@@ -6,6 +6,12 @@
 // getObjectBuffer / removeObject / bucketName) is intentionally storage-agnostic
 // so callers don't care about the backend.
 //
+// coexistence.media_objects.workspace_id is NOT NULL in the database (added
+// by the SaaS Phase 1 migration, akchat_saas_phase1_db_migration.sql) —
+// every write MUST supply it or Postgres rejects the insert outright. This
+// is why every media-library upload was failing regardless of file size
+// (see routes/mediaLibrary.js).
+//
 // node-postgres returns bytea columns as Node Buffers, so getObjectBuffer can
 // hand the value straight back to res.send / Meta upload / disk mirror.
 
@@ -22,20 +28,26 @@ async function ensureBucket() {
       data        BYTEA NOT NULL,
       mime_type   TEXT,
       size_bytes  BIGINT,
+      workspace_id BIGINT,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 }
 
-async function putObject(objectKey, buffer, mimeType) {
+async function putObject(objectKey, buffer, mimeType, workspaceId) {
+  if (workspaceId == null) {
+    // Fail loudly and specifically here rather than letting Postgres throw
+    // an opaque NOT NULL violation two layers down.
+    throw new Error('putObject: workspaceId is required (coexistence.media_objects.workspace_id is NOT NULL)');
+  }
   await pool.query(
-    `INSERT INTO coexistence.media_objects (object_key, data, mime_type, size_bytes)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO coexistence.media_objects (object_key, data, mime_type, size_bytes, workspace_id)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (object_key) DO UPDATE
        SET data = EXCLUDED.data,
            mime_type = EXCLUDED.mime_type,
            size_bytes = EXCLUDED.size_bytes`,
-    [objectKey, buffer, mimeType || null, buffer.length]
+    [objectKey, buffer, mimeType || null, buffer.length, workspaceId]
   );
 }
 
@@ -64,3 +76,4 @@ module.exports = {
   removeObject,
   bucketName,
 };
+
