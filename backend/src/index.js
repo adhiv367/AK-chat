@@ -79,7 +79,6 @@ const { ensureCommerceTables } = require('./db/commerceSchema'); // Phase 7.2 �
 const { ensureCatalogConnectionsTables } = require('./db/catalogConnectionsSchema'); // Phase 7.4
 const { ensureMetaCatalogTables } = require('./db/metaCatalogSchema'); // Phase 7.5 — Meta Commerce Catalog Integration
 const { router: retargetRouter } = require('./routes/retarget');
-const { router: leadIntelligenceRouter } = require('./routes/leadIntelligence');
 const { router: instagramInboxRouter } = require('./routes/instagram/instagramInbox');
 const { router: instagramContactsRouter } = require('./routes/instagram/instagramContacts');
 const { router: instagramTemplatesRouter } = require('./routes/instagram/instagramTemplates');
@@ -235,7 +234,6 @@ app.use('/api', authMiddleware, instagramSettingsRouter);
 app.use('/api', authMiddleware, instagramAnalyticsRouter);
 app.use('/api', authMiddleware, instagramAccountsRouter);
 app.use('/api', authMiddleware, retargetRouter);
-app.use('/api', authMiddleware, attachWorkspace, leadIntelligenceRouter);
 app.use('/api', authMiddleware, productsRouter); // Phase 7.3 — generic Product Catalog
 app.use('/api', authMiddleware, attachWorkspace, catalogConnectionsRouter); // Phase 7.4 — Universal Catalog Connection Layer
 app.use('/api', authMiddleware, attachWorkspace, metaCatalogRouter); // Phase 7.5 — Meta Commerce Catalog Integration
