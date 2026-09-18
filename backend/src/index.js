@@ -10,6 +10,7 @@ const { router: authRouter, authMiddleware, ensureTables } = require('./auth');
 const { attachWorkspace } = require('./middleware/workspaceContext');
 const { router: messagesRouter } = require('./routes/messages');
 const { router: webhookRouter } = require('./routes/webhook');
+const { router: internalRouter } = require('./routes/internal');
 const { router: categoriesRouter } = require('./routes/categories');
 const { router: productsRouter } = require('./routes/products'); // Phase 7.3 — generic Product Catalog
 const { router: catalogConnectionsRouter } = require('./routes/catalogConnections'); // Phase 7.4 — Universal Catalog Connection Layer
@@ -78,6 +79,7 @@ const { ensureCommerceTables } = require('./db/commerceSchema'); // Phase 7.2 �
 const { ensureCatalogConnectionsTables } = require('./db/catalogConnectionsSchema'); // Phase 7.4
 const { ensureMetaCatalogTables } = require('./db/metaCatalogSchema'); // Phase 7.5 — Meta Commerce Catalog Integration
 const { router: retargetRouter } = require('./routes/retarget');
+const { router: leadIntelligenceRouter } = require('./routes/leadIntelligence');
 const { router: instagramInboxRouter } = require('./routes/instagram/instagramInbox');
 const { router: instagramContactsRouter } = require('./routes/instagram/instagramContacts');
 const { router: instagramTemplatesRouter } = require('./routes/instagram/instagramTemplates');
@@ -164,6 +166,7 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 
 // Public routes (webhook from n8n — no auth)
 app.use('/api', webhookRouter);
+app.use('/api', internalRouter);
 app.use('/api', instagramWebhookRouter);
 // Phase 5B — billing-provider webhook. Public (no session), same as the
 // Meta webhooks above: authentication is the HMAC signature, not a cookie.
@@ -232,6 +235,7 @@ app.use('/api', authMiddleware, instagramSettingsRouter);
 app.use('/api', authMiddleware, instagramAnalyticsRouter);
 app.use('/api', authMiddleware, instagramAccountsRouter);
 app.use('/api', authMiddleware, retargetRouter);
+app.use('/api', authMiddleware, attachWorkspace, leadIntelligenceRouter);
 app.use('/api', authMiddleware, productsRouter); // Phase 7.3 — generic Product Catalog
 app.use('/api', authMiddleware, attachWorkspace, catalogConnectionsRouter); // Phase 7.4 — Universal Catalog Connection Layer
 app.use('/api', authMiddleware, attachWorkspace, metaCatalogRouter); // Phase 7.5 — Meta Commerce Catalog Integration
@@ -493,3 +497,4 @@ start().catch(err => {
   console.error('[Fatal] Failed to start:', err.message);
   process.exit(1);
 });
+
