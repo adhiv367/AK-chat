@@ -668,7 +668,7 @@ if (product) {
                   }
 
                   if (AI_BRIDGE_ENABLED && (aiPayload.message || aiPayload.image)) {
-                    const aiResponse = await fetch('https://akchat-whatsapp-bot.onrender.com/ai', {
+                    const aiResponse = await fetch('https://akchat-whatsapp-bot-s2s2.onrender.com/ai', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(aiPayload)
