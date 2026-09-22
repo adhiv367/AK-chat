@@ -36,6 +36,16 @@ function requireInternalSecret(req, res, next) {
 router.use(requireInternalSecret);
 
 // POST /internal/prepare-followup
+router.get('/internal/_check-whatsapp-accounts', requireInternalSecret, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "select id, display_name, right(phone_number_id,4) pid_end, right(waba_id,4) waba_end, is_active from coexistence.whatsapp_accounts"
+    );
+    res.json({ rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 router.post('/internal/prepare-followup', async (req, res) => {
   try {
     const { customer_number, template_id, name, variable_mapping } = req.body;
