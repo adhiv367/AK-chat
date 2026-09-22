@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { safeEqual, verifyMetaSignature } = require('../src/util/webhookSignature');
+const { safeEqual, verifyMetaSignature, verifyForwardSecret } = require('../src/util/webhookSignature');
 
 // Build a mock Express req with the given signature header + raw body buffer.
 function mockReq(header, raw) {
@@ -58,5 +58,28 @@ test('verifyMetaSignature returns false when the raw body is absent', () => {
   process.env.META_APP_SECRET = 'top-secret-app-secret';
   assert.equal(verifyMetaSignature(mockReq(sign('top-secret-app-secret', '{}'), null)), false);
   delete process.env.META_APP_SECRET;
+});
+
+// ── verifyForwardSecret (local dev mirror bridge) ──────────────────────
+// Build a mock Express req exposing only an X-Akchat-Forward-Secret header,
+// mirroring how routes/webhook.js reads it (case-insensitive header name).
+function mockForwardReq(headerValue) {
+  return {
+    get(name) { return name.toLowerCase() === 'x-akchat-forward-secret' ? headerValue : undefined; },
+  };
+}
+
+test('verifyForwardSecret returns false when no secret is configured on this instance', () => {
+  assert.equal(verifyForwardSecret(mockForwardReq('anything'), undefined), false);
+  assert.equal(verifyForwardSecret(mockForwardReq('anything'), ''), false);
+});
+
+test('verifyForwardSecret returns false when the header is absent', () => {
+  assert.equal(verifyForwardSecret(mockForwardReq(undefined), 'shared-secret'), false);
+});
+
+test('verifyForwardSecret returns true only for a matching header', () => {
+  assert.equal(verifyForwardSecret(mockForwardReq('shared-secret'), 'shared-secret'), true);
+  assert.equal(verifyForwardSecret(mockForwardReq('wrong-secret'), 'shared-secret'), false);
 });
 
