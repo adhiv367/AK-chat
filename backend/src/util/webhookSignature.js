@@ -29,4 +29,19 @@ function verifyMetaSignature(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-module.exports = { safeEqual, verifyMetaSignature };
+// Verify a forwarded-webhook-mirror request (see routes/webhook.js's
+// LOCAL_WEBHOOK_FORWARD_URL / LOCAL_WEBHOOK_FORWARD_SECRET bridge). A
+// forwarded copy is re-serialized by fetch() before it's sent, so it can
+// never carry a byte-identical Meta HMAC over its own body — this checks a
+// separate shared secret instead. Returns false (never throws) whenever the
+// receiving instance hasn't configured a secret, or the header is absent/
+// mismatched — i.e. "not a forwarded copy" and "misconfigured" look
+// identical to the caller, which is the safe default.
+function verifyForwardSecret(req, secret) {
+  if (!secret) return false;
+  const header = req.get('x-akchat-forward-secret');
+  if (!header) return false;
+  return safeEqual(secret, header);
+}
+
+module.exports = { safeEqual, verifyMetaSignature, verifyForwardSecret };
