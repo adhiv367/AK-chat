@@ -10,7 +10,7 @@ const {
 } = require(
  "../services/aiReplyService"
 );
-const { safeEqual, verifyMetaSignature } = require('../util/webhookSignature');
+const { safeEqual, verifyMetaSignature, verifyForwardSecret } = require('../util/webhookSignature');
 const { evaluateTriggers, resumeAutomation } = require('../engine/automationEngine');
 const { hasManualReplyTag } = require('../services/automationGuard');
 const { markPending, MEDIA_TYPES } = require('../services/mediaDownloader');
@@ -20,8 +20,25 @@ const { enqueueSend } = require('../queue/sendQueue');
 const { prepareProductImage } = require('../services/imagePrep');
 const { uploadMedia } = require('../integrations/metaSend');
 const { syncConversationToZoho } = require('../services/zohoSyncService');
+// Root-cause fix (inbound-message-invisible-in-Inbox bug): resolve the
+// CANONICAL wa_number for a webhook delivery from the account record
+// (looked up by the Meta-assigned, globally-unique phone_number_id),
+// rather than trusting the raw metadata.display_phone_number Meta sends
+// on that particular delivery. See the resolveCanonicalWaNumber() comment
+// below for why these can diverge and why every Inbox/list/contacts query
+// (routes/messages.js) silently drops a row whose wa_number doesn't match.
+const { getAccountByPhoneNumber } = require('./whatsappAccounts');
 const { recordFlowSubmission } = require('../services/flowSubmissionService');
 const orderService = require('../services/orderService'); // Phase 7.7 — Cart
+const { applyCtwaContactAttribution } = require('../services/ctwaAttributionService'); // Phase 11B
+// Phase 12 Step 7 fix — contact.created was never emitted for a contact
+// auto-created by an inbound WhatsApp message (only routes/contacts.js's
+// manual "Add Contact" and routes/apiV1.js's public POST /v1/contacts
+// called this). See the profile-name upsert below for the guarded
+// emission that closes that gap. Does not touch coexistence.webhook_events
+// (the legacy Meta inbound table this file otherwise owns) — this only
+// adds a call into the separate Phase 12 webhook engine.
+const webhookService = require('../services/webhookService');
 
 const router = Router();
 
@@ -44,7 +61,54 @@ function normalizePhone(s) {
   return String(s).replace(/\D/g, '');
 }
 
-function parseMetaPayload(body) {
+// Root cause of the "inbound message never appears in Inbox" bug:
+// every Inbox-facing query (routes/messages.js GET /numbers, /contacts,
+// /messages) filters chat_history by wa_number equal to the CANONICAL
+// value stored on coexistence.whatsapp_accounts.display_phone_number
+// (itself captured once, at connect-time, from the Graph API — see
+// fetchPhoneMeta() in routes/whatsappAccounts.js). The webhook handler,
+// however, used to stamp every inbound record's wa_number straight from
+// THIS delivery's metadata.display_phone_number instead of that stored
+// canonical value. Meta does not guarantee those two strings normalize to
+// the same digits on every delivery for every account (WhatsApp Business
+// App "coexistence" numbers in particular can report a differently
+// formatted display number — e.g. missing/extra country-code digits —
+// on personal-app-originated inbound webhooks than the Graph API returned
+// at onboarding). When they differ, the row is stored correctly (nothing
+// in the webhook path fails or throws) but every Inbox query's
+// `wa_number = ...` / `wa_number = ANY(...)` filter excludes it, so it
+// silently never renders — while automation/Zoho/order ingestion, which
+// all resolve the account via phone_number_id (never via wa_number), are
+// completely unaffected and keep working, exactly matching the reported
+// symptom split.
+//
+// Fix: resolve the account ONCE per (phone_number_id) via
+// getAccountByPhoneNumber(phoneNumberId) — the same Meta-assigned,
+// globally-unique id every other resolution path in this codebase already
+// treats as authoritative (never the customer's number) — and use ITS
+// stored displayPhoneNumber for every record's wa_number. Falls back to
+// the payload's own display_phone_number only if no account is found yet
+// (e.g. a delivery that arrives before onboarding finishes), which
+// preserves prior behavior for that edge case rather than dropping the
+// message.
+async function resolveCanonicalWaNumber(phoneNumberId, fallbackDisplayNumber, cache) {
+  const fallback = normalizePhone(fallbackDisplayNumber);
+  if (!phoneNumberId) return fallback;
+  if (cache.has(phoneNumberId)) return cache.get(phoneNumberId);
+  let resolved = fallback;
+  try {
+    const acct = await getAccountByPhoneNumber(phoneNumberId);
+    if (acct && acct.displayPhoneNumber) {
+      resolved = normalizePhone(acct.displayPhoneNumber);
+    }
+  } catch (err) {
+    console.error('[webhook] canonical wa_number lookup failed for phone_number_id', phoneNumberId, ':', err.message);
+  }
+  cache.set(phoneNumberId, resolved);
+  return resolved;
+}
+
+async function parseMetaPayload(body, waNumberCache) {
   const records = [];
 
   if (!body || body.object !== 'whatsapp_business_account') {
@@ -61,6 +125,9 @@ function parseMetaPayload(body) {
       const metadata = value.metadata || {};
       const phoneNumberId = metadata.phone_number_id || '';
       const displayPhoneNumber = metadata.display_phone_number || '';
+      // Canonical wa_number for every record produced from this change —
+      // see resolveCanonicalWaNumber() above.
+      const canonicalWaNumber = await resolveCanonicalWaNumber(phoneNumberId, displayPhoneNumber, waNumberCache);
 
       // Contact profile info (name mapping)
       const contactProfiles = {};
@@ -75,7 +142,10 @@ function parseMetaPayload(body) {
         const record = {
           message_id: msg.id || '',
           phone_number_id: phoneNumberId,
-          wa_number: normalizePhone(waNum || displayPhoneNumber),
+          // waNum is always the caller-supplied canonicalWaNumber (see call
+          // sites below) — normalizePhone() is idempotent so this is a no-op
+          // safety net, not a second source of truth.
+          wa_number: normalizePhone(waNum),
           contact_number: normalizePhone(contactNum || ''),
           to_number: normalizePhone(msg.to || ''),
           direction,
@@ -93,6 +163,9 @@ function parseMetaPayload(body) {
           // sends the quoted message's wamid here. Stored so we can render the
           // quoted bubble above their reply.
           context_message_id: msg.context?.id || null,
+          // Phase 11A — CTWA referral (null when absent/unparseable; never
+          // throws, never affects any other field on this record).
+          ctwa_referral: parseCtwaReferral(msg),
         };
 
         const type = msg.type;
@@ -193,14 +266,14 @@ function parseMetaPayload(body) {
       // Incoming messages
       const messages = value.messages || [];
       for (const msg of messages) {
-        records.push(parseMessage(msg, 'incoming', displayPhoneNumber, msg.from));
+        records.push(parseMessage(msg, 'incoming', canonicalWaNumber, msg.from));
       }
 
       // Outgoing message echoes (messages sent from the WhatsApp Business app)
       const messageEchoes = value.message_echoes || [];
       for (const msg of messageEchoes) {
         // For echoes: from = business number, to = customer
-        records.push(parseMessage(msg, 'outgoing', displayPhoneNumber, msg.to));
+        records.push(parseMessage(msg, 'outgoing', canonicalWaNumber, msg.to));
       }
 
       // Status updates (delivered, read, sent)
@@ -209,7 +282,7 @@ function parseMetaPayload(body) {
         records.push({
           message_id: status.id || '',
           phone_number_id: phoneNumberId,
-          wa_number: normalizePhone(displayPhoneNumber),
+          wa_number: canonicalWaNumber,
           contact_number: normalizePhone(status.recipient_id || ''),
           to_number: normalizePhone(status.recipient_id || ''),
           direction: 'outgoing',
@@ -235,18 +308,104 @@ function parseMetaPayload(body) {
   return records;
 }
 
+// Phase 11A — CTWA (Click-to-WhatsApp Ad) referral capture.
+// Meta attaches a `referral` object to the first inbound message of a
+// conversation that originated from a WhatsApp CTWA ad click. Shape (all
+// fields optional/partial in practice):
+//   {
+//     source_url, source_type, source_id, headline, body, media_type,
+//     image_url, video_url, thumbnail_url, ctwa_clid
+//   }
+// This is read-only, best-effort extraction: never throws, never assumes
+// any field is present, and never touches message parsing for messages
+// that lack a referral entirely (the vast majority). Returns null when
+// there is nothing usable, so callers can treat "no referral" uniformly
+// whether the field was absent or malformed.
+function parseCtwaReferral(msg) {
+  const ref = msg && msg.referral;
+  if (!ref || typeof ref !== 'object') return null;
+
+  const ctwa_clid = typeof ref.ctwa_clid === 'string' ? ref.ctwa_clid : null;
+  const referral_source_url = typeof ref.source_url === 'string' ? ref.source_url : null;
+  const referral_source_type = typeof ref.source_type === 'string' ? ref.source_type : null;
+  const referral_source_id = typeof ref.source_id === 'string' ? ref.source_id : null;
+  const referral_headline = typeof ref.headline === 'string' ? ref.headline : null;
+  const referral_media_type = typeof ref.media_type === 'string' ? ref.media_type : null;
+
+  // Partial referral objects are common (Meta doesn't guarantee every
+  // field); only treat it as "no referral" if literally everything is
+  // missing, otherwise store whatever fields ARE present.
+  if (
+    ctwa_clid === null && referral_source_url === null && referral_source_type === null &&
+    referral_source_id === null && referral_headline === null && referral_media_type === null
+  ) {
+    return null;
+  }
+
+  return {
+    ctwa_clid,
+    referral_source_url,
+    referral_source_type,
+    referral_source_id,
+    referral_headline,
+    referral_media_type,
+  };
+}
+
+// Redacts a phone number / wa_id down to its last 4 digits for logging.
+function maskId(id) {
+  const s = String(id || '');
+  if (s.length <= 4) return s ? '***' : '';
+  return `***${s.slice(-4)}`;
+}
+
+// Builds a small, non-sensitive summary of an inbound Meta WhatsApp webhook
+// payload for logging — counts and types only, never message bodies, names,
+// media, or full contact identifiers.
+function summarizeWhatsappWebhook(body) {
+  try {
+    const entries = Array.isArray(body?.entry) ? body.entry : [];
+    let messages = 0, statuses = 0;
+    const numbers = new Set();
+    for (const entry of entries) {
+      for (const change of entry?.changes || []) {
+        const value = change?.value || {};
+        for (const m of value.messages || []) {
+          messages += 1;
+          if (m?.from) numbers.add(maskId(m.from));
+        }
+        for (const s of value.statuses || []) {
+          statuses += 1;
+          if (s?.recipient_id) numbers.add(maskId(s.recipient_id));
+        }
+      }
+    }
+    return { entries: entries.length, messages, statuses, numbers: Array.from(numbers) };
+  } catch {
+    return { summary: 'unavailable' };
+  }
+}
+
 /**
  * POST /api/webhook/whatsapp
  * Receives raw Meta WhatsApp webhook payloads forwarded by n8n.
  * No auth required — called by internal n8n instance.
  */
 router.post('/webhook/whatsapp', async (req, res) => {
-  
-  console.log("=================================");
-  console.log("WEBHOOK RECEIVED");
-  console.log(JSON.stringify(req.body, null, 2));
-  console.log("=================================");
   try {
+    // ── Local dev mirror auth (demo bridge) ───────────────────────────
+    // A forwarded copy of an ALREADY-Meta-verified payload (see the
+    // fire-and-forget forward further below) arrives re-serialized by
+    // fetch(), so it will never carry a byte-identical X-Hub-Signature-256
+    // HMAC over its own body — that is expected, not a spoofing attempt.
+    // It is authenticated instead by a separate shared secret configured
+    // on both the forwarding and receiving instance
+    // (LOCAL_WEBHOOK_FORWARD_SECRET), compared in constant time. This path
+    // is only reachable when the RECEIVING instance has that secret
+    // configured; otherwise every request falls straight through to the
+    // normal Meta signature verification below, completely unchanged.
+    const isForwardedCopy = verifyForwardSecret(req, process.env.LOCAL_WEBHOOK_FORWARD_SECRET);
+
     // Authenticity: this endpoint is necessarily unauthenticated (public), so
     // the control is Meta's HMAC signature. When META_APP_SECRET is configured
     // we REJECT anything unsigned/invalid.
@@ -255,25 +414,65 @@ router.post('/webhook/whatsapp', async (req, res) => {
     // never process an unverifiable webhook as if it were trusted. This now
     // matches billing.js's POST /billing/webhook fail-closed pattern for its
     // own null (unconfigured) case: reject rather than proceed.
-    const sig = verifyMetaSignature(req);
-    if (sig === false) {
-      return res.status(403).json({ error: 'Invalid webhook signature' });
+    //
+    // Security fix (Phase 9E): the raw payload used to be logged in full
+    // BEFORE signature verification — an unauthenticated caller could push
+    // arbitrary contact/message content straight into server logs. We now
+    // verify first, and even then only log a small redacted summary, never
+    // the raw body.
+    if (!isForwardedCopy) {
+      const sig = verifyMetaSignature(req);
+      if (sig === false) {
+        return res.status(403).json({ error: 'Invalid webhook signature' });
+      }
+      if (sig === null) {
+        console.error('[webhook] META_APP_SECRET not configured — rejecting inbound webhook (cannot verify authenticity).');
+        return res.status(501).json({ error: 'Webhook signature verification is not configured' });
+      }
     }
-    if (sig === null) {
-      console.error('[webhook] META_APP_SECRET not configured — rejecting inbound webhook (cannot verify authenticity).');
-      return res.status(501).json({ error: 'Webhook signature verification is not configured' });
-    }
+    console.log('[webhook] whatsapp payload received:', summarizeWhatsappWebhook(req.body), isForwardedCopy ? '(forwarded copy — storage-only, no AI/automation)' : '');
 
     const payload = req.body;
     if (!payload) {
       return res.status(400).json({ error: 'Empty payload' });
     }
 
+    // ── Local dev mirror forward (demo bridge) ──────────────────────────
+    // Fire-and-forget copy of this verified inbound payload to a local dev
+    // backend (e.g. via an ngrok tunnel), purely so a local Inbox can
+    // display live messages without ever being in Meta's real delivery
+    // path. Never awaited by the main flow below: any failure (tunnel
+    // offline, DNS, timeout) is caught right here and only logged — it can
+    // never delay or fail this response, the DB write, or the AI reply.
+    // Never re-forwards a request that is itself a forwarded copy, so two
+    // mirrored instances can never loop. No-op unless an operator has
+    // explicitly set LOCAL_WEBHOOK_FORWARD_URL on THIS instance.
+    if (!isForwardedCopy && process.env.LOCAL_WEBHOOK_FORWARD_URL) {
+      const forwardUrl = process.env.LOCAL_WEBHOOK_FORWARD_URL;
+      const forwardHeaders = { 'Content-Type': 'application/json' };
+      if (process.env.LOCAL_WEBHOOK_FORWARD_SECRET) {
+        forwardHeaders['X-Akchat-Forward-Secret'] = process.env.LOCAL_WEBHOOK_FORWARD_SECRET;
+      }
+      const forwardController = new AbortController();
+      const forwardTimeout = setTimeout(() => forwardController.abort(), 5000);
+      fetch(forwardUrl, {
+        method: 'POST',
+        headers: forwardHeaders,
+        body: JSON.stringify(payload),
+        signal: forwardController.signal,
+      })
+        .catch((err) => console.error('[webhook] local mirror forward failed (non-blocking):', err.message))
+        .finally(() => clearTimeout(forwardTimeout));
+    }
+
     // Support both array of payloads (n8n batch) and single payload
     const payloads = Array.isArray(payload) ? payload : [payload];
     const allRecords = [];
+    // Shared across every payload/change in this delivery so a batch touching
+    // the same phone_number_id multiple times only looks the account up once.
+    const waNumberCache = new Map();
     for (const p of payloads) {
-      const records = parseMetaPayload(p);
+      const records = await parseMetaPayload(p, waNumberCache);
       allRecords.push(...records);
     }
 
@@ -382,20 +581,45 @@ router.post('/webhook/whatsapp', async (req, res) => {
         }
 
         // Upsert chat_history (ignore duplicates on message_id)
+        //
+        // Phase 11A — CTWA referral columns are additive and first-touch:
+        // on a duplicate/retried webhook delivery for the same message_id,
+        // an already-stored referral value must never be clobbered (Meta
+        // only sends `referral` on the first inbound message of a CTWA
+        // conversation, but retries of that same webhook are still
+        // possible). COALESCE(existing, incoming) keeps whichever value
+        // was written first and only fills a column in if it was NULL —
+        // it never overwrites a previously captured value. status and
+        // raw_payload keep their existing (non-referral) overwrite
+        // behavior, unchanged.
         await client.query(
           `INSERT INTO coexistence.chat_history
             (message_id, phone_number_id, wa_number, contact_number, to_number,
              direction, message_type, message_body, raw_payload, media_url,
-             media_mime_type, media_filename, status, timestamp, context_message_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+             media_mime_type, media_filename, status, timestamp, context_message_id,
+             ctwa_clid, referral_source_url, referral_source_type,
+             referral_source_id, referral_headline, referral_media_type)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
            ON CONFLICT (message_id) DO UPDATE SET
              status = EXCLUDED.status,
-             raw_payload = EXCLUDED.raw_payload`,
+             raw_payload = EXCLUDED.raw_payload,
+             ctwa_clid = COALESCE(coexistence.chat_history.ctwa_clid, EXCLUDED.ctwa_clid),
+             referral_source_url = COALESCE(coexistence.chat_history.referral_source_url, EXCLUDED.referral_source_url),
+             referral_source_type = COALESCE(coexistence.chat_history.referral_source_type, EXCLUDED.referral_source_type),
+             referral_source_id = COALESCE(coexistence.chat_history.referral_source_id, EXCLUDED.referral_source_id),
+             referral_headline = COALESCE(coexistence.chat_history.referral_headline, EXCLUDED.referral_headline),
+             referral_media_type = COALESCE(coexistence.chat_history.referral_media_type, EXCLUDED.referral_media_type)`,
           [
             r.message_id, r.phone_number_id, r.wa_number, r.contact_number, r.to_number,
             r.direction, r.message_type, r.message_body, r.raw_payload, r.media_url,
             r.media_mime_type, r.media_filename || null, r.status, r.timestamp,
             r.context_message_id || null,
+            r.ctwa_referral?.ctwa_clid || null,
+            r.ctwa_referral?.referral_source_url || null,
+            r.ctwa_referral?.referral_source_type || null,
+            r.ctwa_referral?.referral_source_id || null,
+            r.ctwa_referral?.referral_headline || null,
+            r.ctwa_referral?.referral_media_type || null,
           ]
         );
 
@@ -419,15 +643,57 @@ router.post('/webhook/whatsapp', async (req, res) => {
             [r.phone_number_id]
           );
           const contactWorkspaceId = acctRows[0]?.workspace_id ?? null;
-          await client.query(
+          // Phase 12 Step 7 fix — (xmax = 0) is the standard Postgres way to
+          // tell an INSERT from an ON CONFLICT DO UPDATE within one
+          // RETURNING: true only when this statement itself created the row
+          // (xmax is unset on a fresh insert), false when it updated an
+          // existing one. Needed so contact.created fires once, on genuine
+          // creation, not on every subsequent inbound message from an
+          // already-known contact.
+          const { rows: upsertRows } = await client.query(
             `INSERT INTO coexistence.contacts (workspace_id, wa_number, contact_number, profile_name)
              VALUES ($1, $2, $3, $4)
              ON CONFLICT (wa_number, contact_number) DO UPDATE SET
                profile_name = EXCLUDED.profile_name,
                workspace_id = COALESCE(coexistence.contacts.workspace_id, EXCLUDED.workspace_id),
-               updated_at = NOW()`,
+               updated_at = NOW()
+             RETURNING id, created_at, (xmax = 0) AS inserted`,
             [contactWorkspaceId, r.wa_number, r.contact_number, r.contact_name]
           );
+
+          // Fire-and-forget, same contract as routes/contacts.js's own
+          // contact.created emission: unawaited + .catch()-logged so a
+          // webhook/queue/DB hiccup here can never affect this inbound
+          // webhook's own transaction or response. Only fires for a truly
+          // new row, and only when a workspace was actually resolved (never
+          // fires with a null/cross-tenant workspaceId — same isolation
+          // contract emitEvent() itself enforces by skipping a falsy
+          // workspaceId).
+          const newContact = upsertRows[0];
+          if (newContact?.inserted && contactWorkspaceId) {
+            webhookService.emitEvent(contactWorkspaceId, webhookService.EVENT_TYPES.CONTACT_CREATED, {
+              contact_id: newContact.id,
+              name: r.contact_name,
+              contact_number: r.contact_number,
+              wa_number: r.wa_number,
+              created_at: newContact.created_at,
+            }).catch((err) => console.error('[webhookService] emit contact.created failed:', err.message));
+          }
+        }
+
+        // ── Phase 11B — CTWA contact attribution ─────────────────────
+        // Additive only: runs after the profile-name upsert above (so an
+        // existing contact created by it is found here, never duplicated)
+        // and inside the SAME transaction as the chat_history insert for
+        // this record — see ctwaAttributionService.js for the full design
+        // (first-touch only, namespaced custom_fields.ctwa, workspace/
+        // WA-number scoped identically to the profile-name upsert). Never
+        // throws — a failure here must never abort message storage for
+        // the rest of this batch.
+        try {
+          await applyCtwaContactAttribution(client, r);
+        } catch (ctwaErr) {
+          console.error('[webhook] CTWA contact attribution error:', ctwaErr.message);
         }
       }
 
@@ -439,6 +705,16 @@ router.post('/webhook/whatsapp', async (req, res) => {
       client.release();
     }
 
+    // ── Local dev mirror guard (demo bridge) ────────────────────────────
+    // A forwarded copy is stored above (chat_history/contacts/reactions/
+    // statuses — unchanged, unconditional) so the local Inbox reflects it,
+    // but everything below this point — Zoho sync, cart/order ingestion,
+    // paused-automation resume, fresh trigger evaluation, and the AI reply
+    // — is real, side-effecting, message-sending behavior that Render
+    // already ran once for this same message. Skipping it here is what
+    // keeps Render the only instance that ever replies, and prevents a
+    // second local automation run against the same inbound event.
+    if (!isForwardedCopy) {
     // Evaluate automation triggers
     // 1. For incoming messages (keyword, anyMessage, newContact triggers)
     //    First: if this conversation has paused executions awaiting a reply,
@@ -601,7 +877,6 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
 const product =
 findProduct(record.message_body || "");
-
 if (product) {
 
   console.log(
@@ -787,6 +1062,7 @@ if (product) {
         }
       }
     }
+    } // end if (!isForwardedCopy) — local dev mirror guard
 
     // Enqueue durable media downloads via BullMQ (concurrency-capped + retried)
     for (const r of allRecords) {
