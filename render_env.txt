@@ -18,3 +18,5 @@ META_IG_REDIRECT_URI=https://outback-handclasp-mortality.ngrok-free.dev/api/inst
 BREVO_API_KEY=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
 BREVO_SENDER_EMAIL=spideyyyy685@gmail.com
 BREVO_SENDER_NAME=Invi Creation
+LOCAL_WEBHOOK_FORWARD_URL=https://outback-handclasp-mortality.ngrok-free.dev/api/webhook/whatsapp
+LOCAL_WEBHOOK_FORWARD_SECRET=AKCHAT-DEMO-2026-FORWARD-SECRET-987654
