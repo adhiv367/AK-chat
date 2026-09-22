@@ -1,0 +1,1248 @@
+pg_restore: connecting to database for restore
+pg_restore: dropping FK CONSTRAINT user_wa_assignments user_wa_assignments_user_id_fkey
+pg_restore: dropping FK CONSTRAINT user_wa_assignments user_wa_assignments_created_by_fkey
+pg_restore: dropping FK CONSTRAINT user_audit_log user_audit_log_actor_user_id_fkey
+pg_restore: dropping FK CONSTRAINT tags tags_category_id_fkey
+pg_restore: dropping FK CONSTRAINT pipelines pipelines_created_by_fkey
+pg_restore: dropping FK CONSTRAINT pipeline_stages pipeline_stages_pipeline_id_fkey
+pg_restore: dropping FK CONSTRAINT message_templates message_templates_whatsapp_account_id_fkey
+pg_restore: dropping FK CONSTRAINT message_template_revisions message_template_revisions_template_id_fkey
+pg_restore: dropping FK CONSTRAINT message_template_analytics_daily message_template_analytics_daily_template_id_fkey
+pg_restore: dropping FK CONSTRAINT media_meta_sync media_meta_sync_media_id_fkey
+pg_restore: dropping FK CONSTRAINT media_meta_sync media_meta_sync_account_id_fkey
+pg_restore: dropping FK CONSTRAINT media_library media_library_whatsapp_account_id_fkey
+pg_restore: dropping FK CONSTRAINT knowledge_chunks knowledge_chunks_document_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_workflows instagram_workflows_instagram_account_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_workflow_executions instagram_workflow_executions_workflow_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_workflow_execution_steps instagram_workflow_execution_steps_execution_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_templates instagram_templates_instagram_account_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_tags instagram_tags_contact_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_notes instagram_notes_contact_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_messages instagram_messages_conversation_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_conversations instagram_conversations_instagram_account_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_conversations instagram_conversations_contact_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_contacts instagram_contacts_instagram_account_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_campaigns instagram_campaigns_instagram_account_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_campaign_messages instagram_campaign_messages_contact_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_campaign_messages instagram_campaign_messages_campaign_id_fkey
+pg_restore: dropping FK CONSTRAINT instagram_ai_logs instagram_ai_logs_conversation_id_fkey
+pg_restore: dropping FK CONSTRAINT email_subscribers email_subscribers_source_id_fkey
+pg_restore: dropping FK CONSTRAINT email_inbox_messages email_inbox_messages_subscriber_id_fkey
+pg_restore: dropping FK CONSTRAINT email_campaigns email_campaigns_template_id_fkey
+pg_restore: dropping FK CONSTRAINT deals deals_stage_id_fkey
+pg_restore: dropping FK CONSTRAINT deals deals_pipeline_id_fkey
+pg_restore: dropping FK CONSTRAINT deals deals_created_by_fkey
+pg_restore: dropping FK CONSTRAINT deals deals_assigned_user_id_fkey
+pg_restore: dropping FK CONSTRAINT contacts contacts_assigned_user_id_fkey
+pg_restore: dropping FK CONSTRAINT broadcasts broadcasts_template_id_fkey
+pg_restore: dropping FK CONSTRAINT broadcast_logs broadcast_logs_broadcast_id_fkey
+pg_restore: dropping FK CONSTRAINT automation_executions automation_executions_automation_id_fkey
+pg_restore: dropping FK CONSTRAINT automation_execution_steps automation_execution_steps_execution_id_fkey
+pg_restore: dropping FK CONSTRAINT akchat_users akchat_users_created_by_fkey
+pg_restore: dropping INDEX whatsapp_accounts_singleton
+pg_restore: dropping INDEX idx_whatsapp_accounts_phone_number_id
+pg_restore: dropping INDEX idx_whatsapp_accounts_one_default
+pg_restore: dropping INDEX idx_webhook_events_subtype
+pg_restore: dropping INDEX idx_webhook_events_status
+pg_restore: dropping INDEX idx_webhook_events_received
+pg_restore: dropping INDEX idx_webhook_events_phone
+pg_restore: dropping INDEX idx_webhook_events_kind
+pg_restore: dropping INDEX idx_wa_links_slug
+pg_restore: dropping INDEX idx_wa_links_created_at
+pg_restore: dropping INDEX idx_user_wa_assignments_wa
+pg_restore: dropping INDEX idx_template_revisions_template
+pg_restore: dropping INDEX idx_template_analytics_day
+pg_restore: dropping INDEX idx_team_members_bda_id
+pg_restore: dropping INDEX idx_shown_products_customer_id
+pg_restore: dropping INDEX idx_retarget_sync_log_started_at
+pg_restore: dropping INDEX idx_retarget_customers_status
+pg_restore: dropping INDEX idx_retarget_customers_phone
+pg_restore: dropping INDEX idx_retarget_customers_created_at
+pg_restore: dropping INDEX idx_pipeline_stages_pipeline
+pg_restore: dropping INDEX idx_message_templates_whatsapp_account
+pg_restore: dropping INDEX idx_message_templates_status
+pg_restore: dropping INDEX idx_message_templates_name
+pg_restore: dropping INDEX idx_message_templates_language
+pg_restore: dropping INDEX idx_message_templates_group_key
+pg_restore: dropping INDEX idx_message_templates_category
+pg_restore: dropping INDEX idx_message_reactions_target
+pg_restore: dropping INDEX idx_message_reactions_convo
+pg_restore: dropping INDEX idx_media_meta_sync_expiring
+pg_restore: dropping INDEX idx_media_meta_sync_account
+pg_restore: dropping INDEX idx_media_library_uploaded_at
+pg_restore: dropping INDEX idx_media_library_type
+pg_restore: dropping INDEX idx_media_library_account
+pg_restore: dropping INDEX idx_knowledge_documents_workspace_id
+pg_restore: dropping INDEX idx_knowledge_chunks_workspace_id
+pg_restore: dropping INDEX idx_knowledge_chunks_embedding
+pg_restore: dropping INDEX idx_knowledge_chunks_document_id
+pg_restore: dropping INDEX idx_intent_profiles_score
+pg_restore: dropping INDEX idx_intent_profiles_intent
+pg_restore: dropping INDEX idx_intent_history_customer
+pg_restore: dropping INDEX idx_executions_resume_lookup
+pg_restore: dropping INDEX idx_execution_steps_wa_status
+pg_restore: dropping INDEX idx_execution_steps_wa_msg_id
+pg_restore: dropping INDEX idx_execution_steps_node_id
+pg_restore: dropping INDEX idx_execution_steps_execution_id
+pg_restore: dropping INDEX idx_execution_steps_exec_wa_status
+pg_restore: dropping INDEX idx_email_subscribers_status
+pg_restore: dropping INDEX idx_email_subscribers_created_at
+pg_restore: dropping INDEX idx_email_inbox_message_id
+pg_restore: dropping INDEX idx_email_inbox_created_at
+pg_restore: dropping INDEX idx_email_inbox_contact_email
+pg_restore: dropping INDEX idx_email_campaigns_created_at
+pg_restore: dropping INDEX idx_deals_won_at
+pg_restore: dropping INDEX idx_deals_status
+pg_restore: dropping INDEX idx_deals_stage
+pg_restore: dropping INDEX idx_deals_pipeline_position
+pg_restore: dropping INDEX idx_deals_pipeline
+pg_restore: dropping INDEX idx_deals_assigned
+pg_restore: dropping INDEX idx_customer_interests_status
+pg_restore: dropping INDEX idx_customer_interests_dedupe
+pg_restore: dropping INDEX idx_customer_interests_customer
+pg_restore: dropping INDEX idx_conversation_messages_customer_id
+pg_restore: dropping INDEX idx_contacts_lookup
+pg_restore: dropping INDEX idx_contacts_display_name
+pg_restore: dropping INDEX idx_contacts_custom_fields
+pg_restore: dropping INDEX idx_contacts_assigned_user
+pg_restore: dropping INDEX idx_contact_field_definitions_sort
+pg_restore: dropping INDEX idx_chatbots_status
+pg_restore: dropping INDEX idx_chat_wa_number
+pg_restore: dropping INDEX idx_chat_timestamp
+pg_restore: dropping INDEX idx_chat_phone_number_id_contact
+pg_restore: dropping INDEX idx_chat_media_status
+pg_restore: dropping INDEX idx_chat_incoming
+pg_restore: dropping INDEX idx_chat_history_starred
+pg_restore: dropping INDEX idx_chat_history_context
+pg_restore: dropping INDEX idx_chat_contact
+pg_restore: dropping INDEX idx_broadcasts_status
+pg_restore: dropping INDEX idx_broadcasts_scheduled
+pg_restore: dropping INDEX idx_broadcasts_created_at
+pg_restore: dropping INDEX idx_broadcast_logs_wa_message_id
+pg_restore: dropping INDEX idx_broadcast_logs_sent_at
+pg_restore: dropping INDEX idx_broadcast_logs_broadcast_id
+pg_restore: dropping INDEX idx_automation_executions_status
+pg_restore: dropping INDEX idx_automation_executions_started_at
+pg_restore: dropping INDEX idx_automation_executions_automation_id
+pg_restore: dropping INDEX idx_audit_target
+pg_restore: dropping INDEX idx_audit_created
+pg_restore: dropping INDEX idx_audit_actor
+pg_restore: dropping INDEX idx_audit_action
+pg_restore: dropping INDEX ai_models_provider_idx
+pg_restore: dropping CONSTRAINT whatsapp_accounts whatsapp_accounts_pkey
+pg_restore: while PROCESSING TOC:
+pg_restore: from TOC entry 4207; 2606 16777 CONSTRAINT whatsapp_accounts whatsapp_accounts_pkey postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop constraint whatsapp_accounts_pkey on table coexistence.whatsapp_accounts because other objects depend on it
+DETAIL:  constraint zoho_connections_whatsapp_account_id_fkey on table coexistence.zoho_connections depends on index coexistence.whatsapp_accounts_pkey
+constraint zoho_lead_links_whatsapp_account_id_fkey on table coexistence.zoho_lead_links depends on index coexistence.whatsapp_accounts_pkey
+constraint zoho_field_mappings_whatsapp_account_id_fkey on table coexistence.zoho_field_mappings depends on index coexistence.whatsapp_accounts_pkey
+constraint zoho_extraction_audit_whatsapp_account_id_fkey on table coexistence.zoho_extraction_audit depends on index coexistence.whatsapp_accounts_pkey
+constraint zoho_lead_notes_whatsapp_account_id_fkey on table coexistence.zoho_lead_notes depends on index coexistence.whatsapp_accounts_pkey
+constraint zoho_sync_state_whatsapp_account_id_fkey on table coexistence.zoho_sync_state depends on index coexistence.whatsapp_accounts_pkey
+constraint flows_whatsapp_account_id_fkey on table coexistence.flows depends on index coexistence.whatsapp_accounts_pkey
+constraint products_whatsapp_account_id_fkey on table coexistence.products depends on index coexistence.whatsapp_accounts_pkey
+constraint carts_whatsapp_account_id_fkey on table coexistence.carts depends on index coexistence.whatsapp_accounts_pkey
+constraint orders_whatsapp_account_id_fkey on table coexistence.orders depends on index coexistence.whatsapp_accounts_pkey
+constraint meta_catalog_connections_whatsapp_account_id_fkey on table coexistence.meta_catalog_connections depends on index coexistence.whatsapp_accounts_pkey
+constraint meta_catalog_sync_log_whatsapp_account_id_fkey on table coexistence.meta_catalog_sync_log depends on index coexistence.whatsapp_accounts_pkey
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: ALTER TABLE IF EXISTS ONLY coexistence.whatsapp_accounts DROP CONSTRAINT IF EXISTS whatsapp_accounts_pkey;
+pg_restore: dropping CONSTRAINT whatsapp_accounts whatsapp_accounts_phone_number_id_key
+pg_restore: dropping CONSTRAINT webhook_events webhook_events_pkey
+pg_restore: dropping CONSTRAINT wa_links wa_links_slug_key
+pg_restore: dropping CONSTRAINT wa_links wa_links_pkey
+pg_restore: dropping CONSTRAINT user_wa_assignments user_wa_assignments_user_id_wa_number_key
+pg_restore: dropping CONSTRAINT user_wa_assignments user_wa_assignments_pkey
+pg_restore: dropping CONSTRAINT user_audit_log user_audit_log_pkey
+pg_restore: dropping CONSTRAINT team_members team_members_pkey
+pg_restore: dropping CONSTRAINT team_members team_members_bda_id_key
+pg_restore: dropping CONSTRAINT tags tags_pkey
+pg_restore: dropping CONSTRAINT shown_products shown_products_pkey
+pg_restore: dropping CONSTRAINT retarget_sync_log retarget_sync_log_pkey
+pg_restore: dropping CONSTRAINT retarget_sheet_settings retarget_sheet_settings_pkey
+pg_restore: dropping CONSTRAINT retarget_customers retarget_customers_pkey
+pg_restore: dropping CONSTRAINT pipelines pipelines_pkey
+pg_restore: dropping CONSTRAINT pipeline_stages pipeline_stages_pkey
+pg_restore: dropping CONSTRAINT message_templates message_templates_pkey
+pg_restore: from TOC entry 4165; 2606 16751 CONSTRAINT message_templates message_templates_pkey postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop constraint message_templates_pkey on table coexistence.message_templates because other objects depend on it
+DETAIL:  constraint campaigns_template_id_fkey on table coexistence.campaigns depends on index coexistence.message_templates_pkey
+constraint sequence_steps_template_id_fkey on table coexistence.sequence_steps depends on index coexistence.message_templates_pkey
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: ALTER TABLE IF EXISTS ONLY coexistence.message_templates DROP CONSTRAINT IF EXISTS message_templates_pkey;
+pg_restore: dropping CONSTRAINT message_template_revisions message_template_revisions_pkey
+pg_restore: dropping CONSTRAINT message_template_analytics_daily message_template_analytics_daily_pkey
+pg_restore: dropping CONSTRAINT message_reactions message_reactions_target_message_id_direction_key
+pg_restore: dropping CONSTRAINT message_reactions message_reactions_pkey
+pg_restore: dropping CONSTRAINT media_objects media_objects_pkey
+pg_restore: dropping CONSTRAINT media_meta_sync media_meta_sync_pkey
+pg_restore: dropping CONSTRAINT media_meta_sync media_meta_sync_media_id_account_id_key
+pg_restore: dropping CONSTRAINT media_library media_library_pkey
+pg_restore: from TOC entry 4137; 2606 16735 CONSTRAINT media_library media_library_pkey postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop constraint media_library_pkey on table coexistence.media_library because other objects depend on it
+DETAIL:  constraint campaigns_media_library_id_fkey on table coexistence.campaigns depends on index coexistence.media_library_pkey
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: ALTER TABLE IF EXISTS ONLY coexistence.media_library DROP CONSTRAINT IF EXISTS media_library_pkey;
+pg_restore: dropping CONSTRAINT knowledge_documents knowledge_documents_pkey
+pg_restore: dropping CONSTRAINT knowledge_chunks knowledge_chunks_pkey
+pg_restore: dropping CONSTRAINT instagram_workflows instagram_workflows_pkey
+pg_restore: dropping CONSTRAINT instagram_workflow_executions instagram_workflow_executions_pkey
+pg_restore: dropping CONSTRAINT instagram_workflow_execution_steps instagram_workflow_execution_steps_pkey
+pg_restore: dropping CONSTRAINT instagram_templates instagram_templates_pkey
+pg_restore: dropping CONSTRAINT instagram_tags instagram_tags_pkey
+pg_restore: dropping CONSTRAINT instagram_settings instagram_settings_pkey
+pg_restore: dropping CONSTRAINT instagram_notes instagram_notes_pkey
+pg_restore: dropping CONSTRAINT instagram_messages instagram_messages_pkey
+pg_restore: dropping CONSTRAINT instagram_conversations instagram_conversations_pkey
+pg_restore: dropping CONSTRAINT instagram_contacts instagram_contacts_pkey
+pg_restore: dropping CONSTRAINT instagram_campaigns instagram_campaigns_pkey
+pg_restore: dropping CONSTRAINT instagram_campaign_messages instagram_campaign_messages_pkey
+pg_restore: dropping CONSTRAINT instagram_analytics instagram_analytics_pkey
+pg_restore: dropping CONSTRAINT instagram_ai_logs instagram_ai_logs_pkey
+pg_restore: dropping CONSTRAINT instagram_accounts instagram_accounts_pkey
+pg_restore: dropping CONSTRAINT instagram_accounts instagram_accounts_instagram_business_id_key
+pg_restore: dropping CONSTRAINT email_templates email_templates_pkey
+pg_restore: dropping CONSTRAINT email_subscribers email_subscribers_pkey
+pg_restore: dropping CONSTRAINT email_subscribers email_subscribers_email_key
+pg_restore: dropping CONSTRAINT email_sheet_sources email_sheet_sources_pkey
+pg_restore: dropping CONSTRAINT email_senders email_senders_pkey
+pg_restore: dropping CONSTRAINT email_senders email_senders_email_key
+pg_restore: dropping CONSTRAINT email_inbox_poll_state email_inbox_poll_state_pkey
+pg_restore: dropping CONSTRAINT email_inbox_messages email_inbox_messages_pkey
+pg_restore: dropping CONSTRAINT email_campaigns email_campaigns_pkey
+pg_restore: dropping CONSTRAINT deals deals_pkey
+pg_restore: dropping CONSTRAINT customer_interests customer_interests_pkey
+pg_restore: dropping CONSTRAINT customer_intent_profiles customer_intent_profiles_workspace_id_wa_number_contact_num_key
+pg_restore: dropping CONSTRAINT customer_intent_profiles customer_intent_profiles_pkey
+pg_restore: dropping CONSTRAINT customer_intent_history customer_intent_history_pkey
+pg_restore: dropping CONSTRAINT conversation_reads conversation_reads_pkey
+pg_restore: dropping CONSTRAINT conversation_messages conversation_messages_pkey
+pg_restore: dropping CONSTRAINT contacts contacts_wa_number_contact_number_key
+pg_restore: dropping CONSTRAINT contacts contacts_pkey
+pg_restore: dropping CONSTRAINT contact_field_definitions contact_field_definitions_pkey
+pg_restore: dropping CONSTRAINT chatbots chatbots_pkey
+pg_restore: dropping CONSTRAINT chat_history chat_history_pkey
+pg_restore: dropping CONSTRAINT chat_history chat_history_message_id_key
+pg_restore: dropping CONSTRAINT categories categories_pkey
+pg_restore: dropping CONSTRAINT broadcasts broadcasts_pkey
+pg_restore: from TOC entry 4085; 2606 16709 CONSTRAINT broadcasts broadcasts_pkey postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop constraint broadcasts_pkey on table coexistence.broadcasts because other objects depend on it
+DETAIL:  constraint campaigns_broadcast_id_fkey on table coexistence.campaigns depends on index coexistence.broadcasts_pkey
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: ALTER TABLE IF EXISTS ONLY coexistence.broadcasts DROP CONSTRAINT IF EXISTS broadcasts_pkey;
+pg_restore: dropping CONSTRAINT broadcast_logs broadcast_logs_pkey
+pg_restore: dropping CONSTRAINT automation_executions automation_executions_pkey
+pg_restore: dropping CONSTRAINT automation_execution_steps automation_execution_steps_pkey
+pg_restore: dropping CONSTRAINT akchat_users akchat_users_username_key
+pg_restore: dropping CONSTRAINT akchat_users akchat_users_pkey
+pg_restore: from TOC entry 4130; 2606 16731 CONSTRAINT akchat_users akchat_users_pkey postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop constraint akchat_users_pkey on table coexistence.akchat_users because other objects depend on it
+DETAIL:  constraint workspace_members_user_id_fkey on table coexistence.workspace_members depends on index coexistence.akchat_users_pkey
+constraint plan_change_requests_requested_by_fkey on table coexistence.plan_change_requests depends on index coexistence.akchat_users_pkey
+constraint plan_change_requests_resolved_by_fkey on table coexistence.plan_change_requests depends on index coexistence.akchat_users_pkey
+constraint zoho_connections_connected_by_fkey on table coexistence.zoho_connections depends on index coexistence.akchat_users_pkey
+constraint zoho_extraction_audit_reviewed_by_fkey on table coexistence.zoho_extraction_audit depends on index coexistence.akchat_users_pkey
+constraint password_reset_tokens_user_id_fkey on table coexistence.password_reset_tokens depends on index coexistence.akchat_users_pkey
+constraint campaigns_created_by_fkey on table coexistence.campaigns depends on index coexistence.akchat_users_pkey
+constraint sequences_created_by_fkey on table coexistence.sequences depends on index coexistence.akchat_users_pkey
+constraint flows_created_by_fkey on table coexistence.flows depends on index coexistence.akchat_users_pkey
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: ALTER TABLE IF EXISTS ONLY coexistence.akchat_users DROP CONSTRAINT IF EXISTS akchat_users_pkey;
+pg_restore: dropping CONSTRAINT akchat_users akchat_users_email_key
+pg_restore: dropping CONSTRAINT ai_models ai_models_pkey
+pg_restore: dropping DEFAULT whatsapp_accounts id
+pg_restore: dropping DEFAULT webhook_events id
+pg_restore: dropping DEFAULT wa_links id
+pg_restore: dropping DEFAULT user_wa_assignments id
+pg_restore: dropping DEFAULT user_audit_log id
+pg_restore: dropping DEFAULT shown_products id
+pg_restore: dropping DEFAULT retarget_sync_log id
+pg_restore: dropping DEFAULT retarget_sheet_settings id
+pg_restore: dropping DEFAULT retarget_customers id
+pg_restore: dropping DEFAULT pipelines id
+pg_restore: dropping DEFAULT pipeline_stages id
+pg_restore: dropping DEFAULT message_templates id
+pg_restore: dropping DEFAULT message_template_revisions id
+pg_restore: dropping DEFAULT message_reactions id
+pg_restore: dropping DEFAULT media_meta_sync id
+pg_restore: dropping DEFAULT media_library id
+pg_restore: dropping DEFAULT knowledge_documents id
+pg_restore: dropping DEFAULT knowledge_chunks id
+pg_restore: dropping DEFAULT instagram_workflows id
+pg_restore: dropping DEFAULT instagram_workflow_executions id
+pg_restore: dropping DEFAULT instagram_workflow_execution_steps id
+pg_restore: dropping DEFAULT instagram_templates id
+pg_restore: dropping DEFAULT instagram_tags id
+pg_restore: dropping DEFAULT instagram_settings id
+pg_restore: dropping DEFAULT instagram_notes id
+pg_restore: dropping DEFAULT instagram_messages id
+pg_restore: dropping DEFAULT instagram_conversations id
+pg_restore: dropping DEFAULT instagram_contacts id
+pg_restore: dropping DEFAULT instagram_campaigns id
+pg_restore: dropping DEFAULT instagram_campaign_messages id
+pg_restore: dropping DEFAULT instagram_analytics id
+pg_restore: dropping DEFAULT instagram_ai_logs id
+pg_restore: dropping DEFAULT instagram_accounts id
+pg_restore: dropping DEFAULT email_templates id
+pg_restore: dropping DEFAULT email_subscribers id
+pg_restore: dropping DEFAULT email_sheet_sources id
+pg_restore: dropping DEFAULT email_senders id
+pg_restore: dropping DEFAULT email_inbox_messages id
+pg_restore: dropping DEFAULT email_campaigns id
+pg_restore: dropping DEFAULT deals id
+pg_restore: dropping DEFAULT customer_interests id
+pg_restore: dropping DEFAULT customer_intent_profiles id
+pg_restore: dropping DEFAULT customer_intent_history id
+pg_restore: dropping DEFAULT conversation_messages id
+pg_restore: dropping DEFAULT contacts id
+pg_restore: dropping DEFAULT chatbots id
+pg_restore: dropping DEFAULT chat_history id
+pg_restore: dropping DEFAULT broadcasts id
+pg_restore: dropping DEFAULT broadcast_logs id
+pg_restore: dropping DEFAULT automation_executions id
+pg_restore: dropping DEFAULT automation_execution_steps id
+pg_restore: dropping DEFAULT akchat_users id
+pg_restore: dropping DEFAULT ai_models id
+pg_restore: dropping SEQUENCE whatsapp_accounts_id_seq
+pg_restore: dropping TABLE whatsapp_accounts
+pg_restore: from TOC entry 265; 1259 16666 TABLE whatsapp_accounts postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop table coexistence.whatsapp_accounts because other objects depend on it
+DETAIL:  constraint zoho_connections_whatsapp_account_id_fkey on table coexistence.zoho_connections depends on table coexistence.whatsapp_accounts
+constraint zoho_lead_links_whatsapp_account_id_fkey on table coexistence.zoho_lead_links depends on table coexistence.whatsapp_accounts
+constraint zoho_field_mappings_whatsapp_account_id_fkey on table coexistence.zoho_field_mappings depends on table coexistence.whatsapp_accounts
+constraint zoho_extraction_audit_whatsapp_account_id_fkey on table coexistence.zoho_extraction_audit depends on table coexistence.whatsapp_accounts
+constraint zoho_lead_notes_whatsapp_account_id_fkey on table coexistence.zoho_lead_notes depends on table coexistence.whatsapp_accounts
+constraint zoho_sync_state_whatsapp_account_id_fkey on table coexistence.zoho_sync_state depends on table coexistence.whatsapp_accounts
+constraint flows_whatsapp_account_id_fkey on table coexistence.flows depends on table coexistence.whatsapp_accounts
+constraint products_whatsapp_account_id_fkey on table coexistence.products depends on table coexistence.whatsapp_accounts
+constraint carts_whatsapp_account_id_fkey on table coexistence.carts depends on table coexistence.whatsapp_accounts
+constraint orders_whatsapp_account_id_fkey on table coexistence.orders depends on table coexistence.whatsapp_accounts
+constraint meta_catalog_connections_whatsapp_account_id_fkey on table coexistence.meta_catalog_connections depends on table coexistence.whatsapp_accounts
+constraint meta_catalog_sync_log_whatsapp_account_id_fkey on table coexistence.meta_catalog_sync_log depends on table coexistence.whatsapp_accounts
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: DROP TABLE IF EXISTS coexistence.whatsapp_accounts;
+pg_restore: dropping SEQUENCE webhook_events_id_seq
+pg_restore: dropping TABLE webhook_events
+pg_restore: dropping SEQUENCE wa_links_id_seq
+pg_restore: dropping TABLE wa_links
+pg_restore: dropping SEQUENCE user_wa_assignments_id_seq
+pg_restore: dropping TABLE user_wa_assignments
+pg_restore: dropping SEQUENCE user_audit_log_id_seq
+pg_restore: dropping TABLE user_audit_log
+pg_restore: dropping TABLE team_members
+pg_restore: dropping TABLE tags
+pg_restore: dropping SEQUENCE shown_products_id_seq
+pg_restore: dropping TABLE shown_products
+pg_restore: dropping SEQUENCE retarget_sync_log_id_seq
+pg_restore: dropping TABLE retarget_sync_log
+pg_restore: dropping SEQUENCE retarget_sheet_settings_id_seq
+pg_restore: dropping TABLE retarget_sheet_settings
+pg_restore: dropping SEQUENCE retarget_customers_id_seq
+pg_restore: dropping TABLE retarget_customers
+pg_restore: dropping SEQUENCE pipelines_id_seq
+pg_restore: dropping TABLE pipelines
+pg_restore: dropping SEQUENCE pipeline_stages_id_seq
+pg_restore: dropping TABLE pipeline_stages
+pg_restore: dropping SEQUENCE message_templates_id_seq
+pg_restore: dropping TABLE message_templates
+pg_restore: from TOC entry 249; 1259 16578 TABLE message_templates postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop table coexistence.message_templates because other objects depend on it
+DETAIL:  constraint campaigns_template_id_fkey on table coexistence.campaigns depends on table coexistence.message_templates
+constraint sequence_steps_template_id_fkey on table coexistence.sequence_steps depends on table coexistence.message_templates
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: DROP TABLE IF EXISTS coexistence.message_templates;
+pg_restore: dropping SEQUENCE message_template_revisions_id_seq
+pg_restore: dropping TABLE message_template_revisions
+pg_restore: dropping TABLE message_template_analytics_daily
+pg_restore: dropping SEQUENCE message_reactions_id_seq
+pg_restore: dropping TABLE message_reactions
+pg_restore: dropping TABLE media_objects
+pg_restore: dropping SEQUENCE media_meta_sync_id_seq
+pg_restore: dropping TABLE media_meta_sync
+pg_restore: dropping SEQUENCE media_library_id_seq
+pg_restore: dropping TABLE media_library
+pg_restore: from TOC entry 239; 1259 16524 TABLE media_library postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop table coexistence.media_library because other objects depend on it
+DETAIL:  constraint campaigns_media_library_id_fkey on table coexistence.campaigns depends on table coexistence.media_library
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: DROP TABLE IF EXISTS coexistence.media_library;
+pg_restore: dropping SEQUENCE knowledge_documents_id_seq
+pg_restore: dropping TABLE knowledge_documents
+pg_restore: dropping SEQUENCE knowledge_chunks_id_seq
+pg_restore: dropping TABLE knowledge_chunks
+pg_restore: dropping SEQUENCE instagram_workflows_id_seq
+pg_restore: dropping TABLE instagram_workflows
+pg_restore: dropping SEQUENCE instagram_workflow_executions_id_seq
+pg_restore: dropping TABLE instagram_workflow_executions
+pg_restore: dropping SEQUENCE instagram_workflow_execution_steps_id_seq
+pg_restore: dropping TABLE instagram_workflow_execution_steps
+pg_restore: dropping SEQUENCE instagram_templates_id_seq
+pg_restore: dropping TABLE instagram_templates
+pg_restore: dropping SEQUENCE instagram_tags_id_seq
+pg_restore: dropping TABLE instagram_tags
+pg_restore: dropping SEQUENCE instagram_settings_id_seq
+pg_restore: dropping TABLE instagram_settings
+pg_restore: dropping SEQUENCE instagram_notes_id_seq
+pg_restore: dropping TABLE instagram_notes
+pg_restore: dropping SEQUENCE instagram_messages_id_seq
+pg_restore: dropping TABLE instagram_messages
+pg_restore: dropping SEQUENCE instagram_conversations_id_seq
+pg_restore: dropping TABLE instagram_conversations
+pg_restore: dropping SEQUENCE instagram_contacts_id_seq
+pg_restore: dropping TABLE instagram_contacts
+pg_restore: dropping SEQUENCE instagram_campaigns_id_seq
+pg_restore: dropping TABLE instagram_campaigns
+pg_restore: dropping SEQUENCE instagram_campaign_messages_id_seq
+pg_restore: dropping TABLE instagram_campaign_messages
+pg_restore: dropping SEQUENCE instagram_analytics_id_seq
+pg_restore: dropping TABLE instagram_analytics
+pg_restore: dropping SEQUENCE instagram_ai_logs_id_seq
+pg_restore: dropping TABLE instagram_ai_logs
+pg_restore: dropping SEQUENCE instagram_accounts_id_seq
+pg_restore: dropping TABLE instagram_accounts
+pg_restore: dropping SEQUENCE email_templates_id_seq
+pg_restore: dropping TABLE email_templates
+pg_restore: dropping SEQUENCE email_subscribers_id_seq
+pg_restore: dropping TABLE email_subscribers
+pg_restore: dropping SEQUENCE email_sheet_sources_id_seq
+pg_restore: dropping TABLE email_sheet_sources
+pg_restore: dropping SEQUENCE email_senders_id_seq
+pg_restore: dropping TABLE email_senders
+pg_restore: dropping TABLE email_inbox_poll_state
+pg_restore: dropping SEQUENCE email_inbox_messages_id_seq
+pg_restore: dropping TABLE email_inbox_messages
+pg_restore: dropping SEQUENCE email_campaigns_id_seq
+pg_restore: dropping TABLE email_campaigns
+pg_restore: dropping SEQUENCE deals_id_seq
+pg_restore: dropping TABLE deals
+pg_restore: dropping SEQUENCE customer_interests_id_seq
+pg_restore: dropping TABLE customer_interests
+pg_restore: dropping SEQUENCE customer_intent_profiles_id_seq
+pg_restore: dropping TABLE customer_intent_profiles
+pg_restore: dropping SEQUENCE customer_intent_history_id_seq
+pg_restore: dropping TABLE customer_intent_history
+pg_restore: dropping TABLE conversation_reads
+pg_restore: dropping SEQUENCE conversation_messages_id_seq
+pg_restore: dropping TABLE conversation_messages
+pg_restore: dropping SEQUENCE contacts_id_seq
+pg_restore: dropping TABLE contacts
+pg_restore: dropping TABLE contact_field_definitions
+pg_restore: dropping SEQUENCE chatbots_id_seq
+pg_restore: dropping TABLE chatbots
+pg_restore: dropping SEQUENCE chat_history_id_seq
+pg_restore: dropping TABLE chat_history
+pg_restore: dropping TABLE categories
+pg_restore: dropping SEQUENCE broadcasts_id_seq
+pg_restore: dropping TABLE broadcasts
+pg_restore: from TOC entry 224; 1259 16431 TABLE broadcasts postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop table coexistence.broadcasts because other objects depend on it
+DETAIL:  constraint campaigns_broadcast_id_fkey on table coexistence.campaigns depends on table coexistence.broadcasts
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: DROP TABLE IF EXISTS coexistence.broadcasts;
+pg_restore: dropping SEQUENCE broadcast_logs_id_seq
+pg_restore: dropping TABLE broadcast_logs
+pg_restore: dropping SEQUENCE automation_executions_id_seq
+pg_restore: dropping TABLE automation_executions
+pg_restore: dropping SEQUENCE automation_execution_steps_id_seq
+pg_restore: dropping TABLE automation_execution_steps
+pg_restore: dropping SEQUENCE akchat_users_id_seq
+pg_restore: dropping TABLE akchat_users
+pg_restore: from TOC entry 237; 1259 16513 TABLE akchat_users postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop table coexistence.akchat_users because other objects depend on it
+DETAIL:  constraint workspace_members_user_id_fkey on table coexistence.workspace_members depends on table coexistence.akchat_users
+constraint plan_change_requests_requested_by_fkey on table coexistence.plan_change_requests depends on table coexistence.akchat_users
+constraint plan_change_requests_resolved_by_fkey on table coexistence.plan_change_requests depends on table coexistence.akchat_users
+constraint zoho_connections_connected_by_fkey on table coexistence.zoho_connections depends on table coexistence.akchat_users
+constraint zoho_extraction_audit_reviewed_by_fkey on table coexistence.zoho_extraction_audit depends on table coexistence.akchat_users
+constraint password_reset_tokens_user_id_fkey on table coexistence.password_reset_tokens depends on table coexistence.akchat_users
+constraint campaigns_created_by_fkey on table coexistence.campaigns depends on table coexistence.akchat_users
+constraint sequences_created_by_fkey on table coexistence.sequences depends on table coexistence.akchat_users
+constraint flows_created_by_fkey on table coexistence.flows depends on table coexistence.akchat_users
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: DROP TABLE IF EXISTS coexistence.akchat_users;
+pg_restore: dropping SEQUENCE ai_models_id_seq
+pg_restore: dropping TABLE ai_models
+pg_restore: dropping EXTENSION vector
+pg_restore: dropping SCHEMA coexistence
+pg_restore: from TOC entry 7; 2615 16388 SCHEMA coexistence postgres
+pg_restore: error: could not execute query: ERROR:  cannot drop schema coexistence because other objects depend on it
+DETAIL:  table coexistence.akchat_users depends on schema coexistence
+table coexistence.broadcasts depends on schema coexistence
+table coexistence.media_library depends on schema coexistence
+table coexistence.message_templates depends on schema coexistence
+table coexistence.whatsapp_accounts depends on schema coexistence
+table coexistence.workspaces depends on schema coexistence
+table coexistence.workspace_members depends on schema coexistence
+table coexistence.plans depends on schema coexistence
+table coexistence.workspace_billing depends on schema coexistence
+table coexistence.billing_events depends on schema coexistence
+table coexistence.plan_change_requests depends on schema coexistence
+table coexistence.workspace_invoices depends on schema coexistence
+table coexistence.workspace_message_usage depends on schema coexistence
+table coexistence.zoho_connections depends on schema coexistence
+function coexistence.zoho_connections_touch_updated_at() depends on schema coexistence
+table coexistence.zoho_lead_links depends on schema coexistence
+function coexistence.zoho_lead_links_touch_updated_at() depends on schema coexistence
+table coexistence.zoho_field_mappings depends on schema coexistence
+function coexistence.zoho_field_mappings_touch_updated_at() depends on schema coexistence
+table coexistence.zoho_extraction_audit depends on schema coexistence
+function coexistence.zoho_extraction_audit_touch_updated_at() depends on schema coexistence
+table coexistence.zoho_lead_notes depends on schema coexistence
+function coexistence.zoho_lead_notes_touch_updated_at() depends on schema coexistence
+table coexistence.zoho_sync_state depends on schema coexistence
+function coexistence.zoho_sync_state_touch_updated_at() depends on schema coexistence
+table coexistence.workspace_defaults depends on schema coexistence
+table coexistence.workspace_ai_profile depends on schema coexistence
+table coexistence.google_sheet_settings depends on schema coexistence
+table coexistence.contact_sync_log depends on schema coexistence
+table coexistence.password_reset_tokens depends on schema coexistence
+table coexistence.campaigns depends on schema coexistence
+function coexistence.campaigns_touch_updated_at() depends on schema coexistence
+table coexistence.sequences depends on schema coexistence
+function coexistence.sequences_touch_updated_at() depends on schema coexistence
+table coexistence.sequence_steps depends on schema coexistence
+function coexistence.sequence_steps_touch_updated_at() depends on schema coexistence
+table coexistence.sequence_enrollments depends on schema coexistence
+function coexistence.sequence_enrollments_touch_updated_at() depends on schema coexistence
+table coexistence.sequence_step_executions depends on schema coexistence
+function coexistence.sequence_step_executions_touch_updated_at() depends on schema coexistence
+table coexistence.flows depends on schema coexistence
+table coexistence.flow_versions depends on schema coexistence
+table coexistence.flow_submissions depends on schema coexistence
+table coexistence.products depends on schema coexistence
+function coexistence.products_touch_updated_at() depends on schema coexistence
+table coexistence.product_variants depends on schema coexistence
+function coexistence.product_variants_touch_updated_at() depends on schema coexistence
+table coexistence.collections depends on schema coexistence
+function coexistence.collections_touch_updated_at() depends on schema coexistence
+table coexistence.product_collections depends on schema coexistence
+table coexistence.inventory_levels depends on schema coexistence
+function coexistence.inventory_levels_touch_updated_at() depends on schema coexistence
+table coexistence.carts depends on schema coexistence
+function coexistence.carts_touch_updated_at() depends on schema coexistence
+table coexistence.cart_items depends on schema coexistence
+function coexistence.cart_items_touch_updated_at() depends on schema coexistence
+table coexistence.orders depends on schema coexistence
+function coexistence.orders_touch_updated_at() depends on schema coexistence
+table coexistence.order_items depends on schema coexistence
+function coexistence.order_items_touch_updated_at() depends on schema coexistence
+table coexistence.shopify_connections depends on schema coexistence
+function coexistence.shopify_connections_touch_updated_at() depends on schema coexistence
+table coexistence.shopify_sync_state depends on schema coexistence
+function coexistence.shopify_sync_state_touch_updated_at() depends on schema coexistence
+table coexistence.meta_catalog_connections depends on schema coexistence
+function coexistence.meta_catalog_connections_touch_updated_at() depends on schema coexistence
+table coexistence.catalog_connections depends on schema coexistence
+function coexistence.catalog_connections_touch_updated_at() depends on schema coexistence
+table coexistence.catalog_sync_log depends on schema coexistence
+table coexistence.meta_catalog_sync_log depends on schema coexistence
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+Command was: DROP SCHEMA IF EXISTS coexistence;
+pg_restore: creating SCHEMA "coexistence"
+pg_restore: error: could not execute query: ERROR:  schema "coexistence" already exists
+Command was: CREATE SCHEMA coexistence;
+
+
+pg_restore: creating EXTENSION "vector"
+pg_restore: creating COMMENT "EXTENSION vector"
+pg_restore: creating TABLE "coexistence.ai_models"
+pg_restore: creating SEQUENCE "coexistence.ai_models_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.ai_models_id_seq"
+pg_restore: creating TABLE "coexistence.akchat_users"
+pg_restore: from TOC entry 237; 1259 16513 TABLE akchat_users postgres
+pg_restore: error: could not execute query: ERROR:  relation "akchat_users" already exists
+Command was: CREATE TABLE coexistence.akchat_users (
+    id bigint NOT NULL,
+    username text NOT NULL,
+    email text NOT NULL,
+    password text NOT NULL,
+    display_name text,
+    role text DEFAULT 'viewer'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    permissions jsonb,
+    last_login_at timestamp with time zone,
+    created_by bigint,
+    CONSTRAINT akchat_users_role_check CHECK ((role = ANY (ARRAY['admin'::text, 'bda_sales'::text, 'viewer'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.akchat_users_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.akchat_users_id_seq"
+pg_restore: creating TABLE "coexistence.automation_execution_steps"
+pg_restore: creating SEQUENCE "coexistence.automation_execution_steps_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.automation_execution_steps_id_seq"
+pg_restore: creating TABLE "coexistence.automation_executions"
+pg_restore: creating SEQUENCE "coexistence.automation_executions_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.automation_executions_id_seq"
+pg_restore: creating TABLE "coexistence.broadcast_logs"
+pg_restore: creating SEQUENCE "coexistence.broadcast_logs_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.broadcast_logs_id_seq"
+pg_restore: creating TABLE "coexistence.broadcasts"
+pg_restore: from TOC entry 224; 1259 16431 TABLE broadcasts postgres
+pg_restore: error: could not execute query: ERROR:  relation "broadcasts" already exists
+Command was: CREATE TABLE coexistence.broadcasts (
+    id integer NOT NULL,
+    from_number text NOT NULL,
+    recipient_numbers jsonb DEFAULT '[]'::jsonb NOT NULL,
+    template_id integer,
+    status character varying(16) DEFAULT 'DRAFT'::character varying NOT NULL,
+    test_number text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    name text,
+    variable_mapping jsonb DEFAULT '{}'::jsonb,
+    message_type text DEFAULT 'template'::text NOT NULL,
+    body text,
+    url text,
+    media_library_id bigint,
+    caption text,
+    scheduled_at timestamp with time zone,
+    CONSTRAINT broadcasts_status_check CHECK (((status)::text = ANY (ARRAY[('DRAFT'::character varying)::text, ('SCHEDULED'::character varying)::text, ('SENDING'::character varying)::text, ('SENT'::character varying)::text, ('PARTIAL'::character varying)::text, ('FAILED'::character varying)::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.broadcasts_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.broadcasts_id_seq"
+pg_restore: creating TABLE "coexistence.categories"
+pg_restore: creating TABLE "coexistence.chat_history"
+pg_restore: creating SEQUENCE "coexistence.chat_history_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.chat_history_id_seq"
+pg_restore: creating TABLE "coexistence.chatbots"
+pg_restore: creating SEQUENCE "coexistence.chatbots_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.chatbots_id_seq"
+pg_restore: creating TABLE "coexistence.contact_field_definitions"
+pg_restore: creating TABLE "coexistence.contacts"
+pg_restore: creating SEQUENCE "coexistence.contacts_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.contacts_id_seq"
+pg_restore: creating TABLE "coexistence.conversation_messages"
+pg_restore: creating SEQUENCE "coexistence.conversation_messages_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.conversation_messages_id_seq"
+pg_restore: creating TABLE "coexistence.conversation_reads"
+pg_restore: creating TABLE "coexistence.customer_intent_history"
+pg_restore: creating SEQUENCE "coexistence.customer_intent_history_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.customer_intent_history_id_seq"
+pg_restore: creating TABLE "coexistence.customer_intent_profiles"
+pg_restore: creating SEQUENCE "coexistence.customer_intent_profiles_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.customer_intent_profiles_id_seq"
+pg_restore: creating TABLE "coexistence.customer_interests"
+pg_restore: creating SEQUENCE "coexistence.customer_interests_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.customer_interests_id_seq"
+pg_restore: creating TABLE "coexistence.deals"
+pg_restore: creating SEQUENCE "coexistence.deals_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.deals_id_seq"
+pg_restore: creating TABLE "coexistence.email_campaigns"
+pg_restore: creating SEQUENCE "coexistence.email_campaigns_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_campaigns_id_seq"
+pg_restore: creating TABLE "coexistence.email_inbox_messages"
+pg_restore: creating SEQUENCE "coexistence.email_inbox_messages_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_inbox_messages_id_seq"
+pg_restore: creating TABLE "coexistence.email_inbox_poll_state"
+pg_restore: creating TABLE "coexistence.email_senders"
+pg_restore: creating SEQUENCE "coexistence.email_senders_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_senders_id_seq"
+pg_restore: creating TABLE "coexistence.email_sheet_sources"
+pg_restore: creating SEQUENCE "coexistence.email_sheet_sources_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_sheet_sources_id_seq"
+pg_restore: creating TABLE "coexistence.email_subscribers"
+pg_restore: creating SEQUENCE "coexistence.email_subscribers_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_subscribers_id_seq"
+pg_restore: creating TABLE "coexistence.email_templates"
+pg_restore: creating SEQUENCE "coexistence.email_templates_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_templates_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_accounts"
+pg_restore: creating SEQUENCE "coexistence.instagram_accounts_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_accounts_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_ai_logs"
+pg_restore: creating SEQUENCE "coexistence.instagram_ai_logs_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_ai_logs_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_analytics"
+pg_restore: creating SEQUENCE "coexistence.instagram_analytics_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_analytics_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_campaign_messages"
+pg_restore: creating SEQUENCE "coexistence.instagram_campaign_messages_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_campaign_messages_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_campaigns"
+pg_restore: creating SEQUENCE "coexistence.instagram_campaigns_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_campaigns_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_contacts"
+pg_restore: creating SEQUENCE "coexistence.instagram_contacts_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_contacts_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_conversations"
+pg_restore: creating SEQUENCE "coexistence.instagram_conversations_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_conversations_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_messages"
+pg_restore: creating SEQUENCE "coexistence.instagram_messages_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_messages_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_notes"
+pg_restore: creating SEQUENCE "coexistence.instagram_notes_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_notes_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_settings"
+pg_restore: creating SEQUENCE "coexistence.instagram_settings_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_settings_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_tags"
+pg_restore: creating SEQUENCE "coexistence.instagram_tags_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_tags_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_templates"
+pg_restore: creating SEQUENCE "coexistence.instagram_templates_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_templates_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_workflow_execution_steps"
+pg_restore: creating SEQUENCE "coexistence.instagram_workflow_execution_steps_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_workflow_execution_steps_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_workflow_executions"
+pg_restore: creating SEQUENCE "coexistence.instagram_workflow_executions_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_workflow_executions_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_workflows"
+pg_restore: creating SEQUENCE "coexistence.instagram_workflows_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_workflows_id_seq"
+pg_restore: creating TABLE "coexistence.knowledge_chunks"
+pg_restore: creating SEQUENCE "coexistence.knowledge_chunks_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.knowledge_chunks_id_seq"
+pg_restore: creating TABLE "coexistence.knowledge_documents"
+pg_restore: creating SEQUENCE "coexistence.knowledge_documents_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.knowledge_documents_id_seq"
+pg_restore: creating TABLE "coexistence.media_library"
+pg_restore: from TOC entry 239; 1259 16524 TABLE media_library postgres
+pg_restore: error: could not execute query: ERROR:  relation "media_library" already exists
+Command was: CREATE TABLE coexistence.media_library (
+    id bigint NOT NULL,
+    filename text NOT NULL,
+    original_name text NOT NULL,
+    mime_type text NOT NULL,
+    size_bytes bigint NOT NULL,
+    media_type text NOT NULL,
+    storage_backend text DEFAULT 'postgres'::text NOT NULL,
+    storage_key text NOT NULL,
+    sha256 text,
+    auto_resync boolean DEFAULT false NOT NULL,
+    notes text,
+    uploaded_by integer,
+    uploaded_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    name text,
+    whatsapp_account_id bigint,
+    CONSTRAINT media_library_media_type_check CHECK ((media_type = ANY (ARRAY['image'::text, 'video'::text, 'audio'::text, 'document'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.media_library_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.media_library_id_seq"
+pg_restore: creating TABLE "coexistence.media_meta_sync"
+pg_restore: creating SEQUENCE "coexistence.media_meta_sync_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.media_meta_sync_id_seq"
+pg_restore: creating TABLE "coexistence.media_objects"
+pg_restore: creating TABLE "coexistence.message_reactions"
+pg_restore: creating SEQUENCE "coexistence.message_reactions_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.message_reactions_id_seq"
+pg_restore: creating TABLE "coexistence.message_template_analytics_daily"
+pg_restore: creating TABLE "coexistence.message_template_revisions"
+pg_restore: creating SEQUENCE "coexistence.message_template_revisions_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.message_template_revisions_id_seq"
+pg_restore: creating TABLE "coexistence.message_templates"
+pg_restore: from TOC entry 249; 1259 16578 TABLE message_templates postgres
+pg_restore: error: could not execute query: ERROR:  relation "message_templates" already exists
+Command was: CREATE TABLE coexistence.message_templates (
+    id integer NOT NULL,
+    name character varying(512) NOT NULL,
+    category character varying(32) NOT NULL,
+    language character varying(10) DEFAULT 'en'::character varying NOT NULL,
+    header_type character varying(16) DEFAULT 'NONE'::character varying NOT NULL,
+    header_text text,
+    media_handle text,
+    body text NOT NULL,
+    footer text,
+    buttons jsonb DEFAULT '[]'::jsonb,
+    samples jsonb DEFAULT '{}'::jsonb,
+    security_recommendation boolean DEFAULT false,
+    code_expiry_minutes integer,
+    allow_category_change boolean DEFAULT true,
+    status character varying(16) DEFAULT 'DRAFT'::character varying NOT NULL,
+    meta_template_id text,
+    submitted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    whatsapp_account_id bigint,
+    quality_score text,
+    rejection_reason text,
+    previous_category text,
+    last_synced_at timestamp with time zone,
+    template_group_key text,
+    header_media_library_id integer,
+    CONSTRAINT message_templates_category_check CHECK (((category)::text = ANY (ARRAY[('MARKETING'::character varying)::text, ('UTILITY'::character varying)::text, ('AUTHENTICATION'::character varying)::text]))),
+    CONSTRAINT message_templates_header_type_check CHECK (((header_type)::text = ANY (ARRAY[('NONE'::character varying)::text, ('TEXT'::character varying)::text, ('IMAGE'::character varying)::text, ('VIDEO'::character varying)::text, ('DOCUMENT'::character varying)::text]))),
+    CONSTRAINT message_templates_status_check CHECK (((status)::text = ANY (ARRAY[('DRAFT'::character varying)::text, ('SUBMITTED'::character varying)::text, ('APPROVED'::character varying)::text, ('REJECTED'::character varying)::text, ('PAUSED'::character varying)::text, ('DISABLED'::character varying)::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.message_templates_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.message_templates_id_seq"
+pg_restore: creating TABLE "coexistence.pipeline_stages"
+pg_restore: creating SEQUENCE "coexistence.pipeline_stages_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.pipeline_stages_id_seq"
+pg_restore: creating TABLE "coexistence.pipelines"
+pg_restore: creating SEQUENCE "coexistence.pipelines_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.pipelines_id_seq"
+pg_restore: creating TABLE "coexistence.retarget_customers"
+pg_restore: creating SEQUENCE "coexistence.retarget_customers_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.retarget_customers_id_seq"
+pg_restore: creating TABLE "coexistence.retarget_sheet_settings"
+pg_restore: creating SEQUENCE "coexistence.retarget_sheet_settings_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.retarget_sheet_settings_id_seq"
+pg_restore: creating TABLE "coexistence.retarget_sync_log"
+pg_restore: creating SEQUENCE "coexistence.retarget_sync_log_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.retarget_sync_log_id_seq"
+pg_restore: creating TABLE "coexistence.shown_products"
+pg_restore: creating SEQUENCE "coexistence.shown_products_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.shown_products_id_seq"
+pg_restore: creating TABLE "coexistence.tags"
+pg_restore: creating TABLE "coexistence.team_members"
+pg_restore: creating TABLE "coexistence.user_audit_log"
+pg_restore: creating SEQUENCE "coexistence.user_audit_log_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.user_audit_log_id_seq"
+pg_restore: creating TABLE "coexistence.user_wa_assignments"
+pg_restore: creating SEQUENCE "coexistence.user_wa_assignments_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.user_wa_assignments_id_seq"
+pg_restore: creating TABLE "coexistence.wa_links"
+pg_restore: creating SEQUENCE "coexistence.wa_links_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.wa_links_id_seq"
+pg_restore: creating TABLE "coexistence.webhook_events"
+pg_restore: creating SEQUENCE "coexistence.webhook_events_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.webhook_events_id_seq"
+pg_restore: creating TABLE "coexistence.whatsapp_accounts"
+pg_restore: from TOC entry 265; 1259 16666 TABLE whatsapp_accounts postgres
+pg_restore: error: could not execute query: ERROR:  relation "whatsapp_accounts" already exists
+Command was: CREATE TABLE coexistence.whatsapp_accounts (
+    id bigint NOT NULL,
+    display_name text NOT NULL,
+    display_phone_number text NOT NULL,
+    phone_number_id text NOT NULL,
+    waba_id text NOT NULL,
+    access_token_encrypted text NOT NULL,
+    is_default boolean DEFAULT false NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    health_status text DEFAULT 'unknown'::text NOT NULL,
+    last_error_at timestamp with time zone,
+    last_error_message text,
+    last_success_at timestamp with time zone,
+    meta_app_id text,
+    verify_token_encrypted text,
+    CONSTRAINT whatsapp_accounts_health_status_check CHECK ((health_status = ANY (ARRAY['unknown'::text, 'healthy'::text, 'invalid_token'::text, 'rate_limited'::text, 'unknown_error'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.whatsapp_accounts_id_seq"
+pg_restore: creating SEQUENCE OWNED BY "coexistence.whatsapp_accounts_id_seq"
+pg_restore: creating DEFAULT "coexistence.ai_models id"
+pg_restore: creating DEFAULT "coexistence.akchat_users id"
+pg_restore: creating DEFAULT "coexistence.automation_execution_steps id"
+pg_restore: creating DEFAULT "coexistence.automation_executions id"
+pg_restore: creating DEFAULT "coexistence.broadcast_logs id"
+pg_restore: creating DEFAULT "coexistence.broadcasts id"
+pg_restore: creating DEFAULT "coexistence.chat_history id"
+pg_restore: creating DEFAULT "coexistence.chatbots id"
+pg_restore: creating DEFAULT "coexistence.contacts id"
+pg_restore: creating DEFAULT "coexistence.conversation_messages id"
+pg_restore: creating DEFAULT "coexistence.customer_intent_history id"
+pg_restore: creating DEFAULT "coexistence.customer_intent_profiles id"
+pg_restore: creating DEFAULT "coexistence.customer_interests id"
+pg_restore: creating DEFAULT "coexistence.deals id"
+pg_restore: creating DEFAULT "coexistence.email_campaigns id"
+pg_restore: creating DEFAULT "coexistence.email_inbox_messages id"
+pg_restore: creating DEFAULT "coexistence.email_senders id"
+pg_restore: creating DEFAULT "coexistence.email_sheet_sources id"
+pg_restore: creating DEFAULT "coexistence.email_subscribers id"
+pg_restore: creating DEFAULT "coexistence.email_templates id"
+pg_restore: creating DEFAULT "coexistence.instagram_accounts id"
+pg_restore: creating DEFAULT "coexistence.instagram_ai_logs id"
+pg_restore: creating DEFAULT "coexistence.instagram_analytics id"
+pg_restore: creating DEFAULT "coexistence.instagram_campaign_messages id"
+pg_restore: creating DEFAULT "coexistence.instagram_campaigns id"
+pg_restore: creating DEFAULT "coexistence.instagram_contacts id"
+pg_restore: creating DEFAULT "coexistence.instagram_conversations id"
+pg_restore: creating DEFAULT "coexistence.instagram_messages id"
+pg_restore: creating DEFAULT "coexistence.instagram_notes id"
+pg_restore: creating DEFAULT "coexistence.instagram_settings id"
+pg_restore: creating DEFAULT "coexistence.instagram_tags id"
+pg_restore: creating DEFAULT "coexistence.instagram_templates id"
+pg_restore: creating DEFAULT "coexistence.instagram_workflow_execution_steps id"
+pg_restore: creating DEFAULT "coexistence.instagram_workflow_executions id"
+pg_restore: creating DEFAULT "coexistence.instagram_workflows id"
+pg_restore: creating DEFAULT "coexistence.knowledge_chunks id"
+pg_restore: creating DEFAULT "coexistence.knowledge_documents id"
+pg_restore: creating DEFAULT "coexistence.media_library id"
+pg_restore: creating DEFAULT "coexistence.media_meta_sync id"
+pg_restore: creating DEFAULT "coexistence.message_reactions id"
+pg_restore: creating DEFAULT "coexistence.message_template_revisions id"
+pg_restore: creating DEFAULT "coexistence.message_templates id"
+pg_restore: creating DEFAULT "coexistence.pipeline_stages id"
+pg_restore: creating DEFAULT "coexistence.pipelines id"
+pg_restore: creating DEFAULT "coexistence.retarget_customers id"
+pg_restore: creating DEFAULT "coexistence.retarget_sheet_settings id"
+pg_restore: creating DEFAULT "coexistence.retarget_sync_log id"
+pg_restore: creating DEFAULT "coexistence.shown_products id"
+pg_restore: creating DEFAULT "coexistence.user_audit_log id"
+pg_restore: creating DEFAULT "coexistence.user_wa_assignments id"
+pg_restore: creating DEFAULT "coexistence.wa_links id"
+pg_restore: creating DEFAULT "coexistence.webhook_events id"
+pg_restore: creating DEFAULT "coexistence.whatsapp_accounts id"
+pg_restore: processing data for table "coexistence.ai_models"
+pg_restore: processing data for table "coexistence.akchat_users"
+pg_restore: from TOC entry 4506; 0 16513 TABLE DATA akchat_users postgres
+pg_restore: error: COPY failed for table "akchat_users": ERROR:  duplicate key value violates unique constraint "akchat_users_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY akchat_users, line 1
+pg_restore: processing data for table "coexistence.automation_execution_steps"
+pg_restore: processing data for table "coexistence.automation_executions"
+pg_restore: processing data for table "coexistence.broadcast_logs"
+pg_restore: processing data for table "coexistence.broadcasts"
+pg_restore: processing data for table "coexistence.categories"
+pg_restore: processing data for table "coexistence.chat_history"
+pg_restore: processing data for table "coexistence.chatbots"
+pg_restore: processing data for table "coexistence.contact_field_definitions"
+pg_restore: processing data for table "coexistence.contacts"
+pg_restore: processing data for table "coexistence.conversation_messages"
+pg_restore: processing data for table "coexistence.conversation_reads"
+pg_restore: processing data for table "coexistence.customer_intent_history"
+pg_restore: processing data for table "coexistence.customer_intent_profiles"
+pg_restore: processing data for table "coexistence.customer_interests"
+pg_restore: processing data for table "coexistence.deals"
+pg_restore: processing data for table "coexistence.email_campaigns"
+pg_restore: processing data for table "coexistence.email_inbox_messages"
+pg_restore: processing data for table "coexistence.email_inbox_poll_state"
+pg_restore: processing data for table "coexistence.email_senders"
+pg_restore: processing data for table "coexistence.email_sheet_sources"
+pg_restore: processing data for table "coexistence.email_subscribers"
+pg_restore: processing data for table "coexistence.email_templates"
+pg_restore: processing data for table "coexistence.instagram_accounts"
+pg_restore: processing data for table "coexistence.instagram_ai_logs"
+pg_restore: processing data for table "coexistence.instagram_analytics"
+pg_restore: processing data for table "coexistence.instagram_campaign_messages"
+pg_restore: processing data for table "coexistence.instagram_campaigns"
+pg_restore: processing data for table "coexistence.instagram_contacts"
+pg_restore: processing data for table "coexistence.instagram_conversations"
+pg_restore: processing data for table "coexistence.instagram_messages"
+pg_restore: processing data for table "coexistence.instagram_notes"
+pg_restore: processing data for table "coexistence.instagram_settings"
+pg_restore: processing data for table "coexistence.instagram_tags"
+pg_restore: processing data for table "coexistence.instagram_templates"
+pg_restore: processing data for table "coexistence.instagram_workflow_execution_steps"
+pg_restore: processing data for table "coexistence.instagram_workflow_executions"
+pg_restore: processing data for table "coexistence.instagram_workflows"
+pg_restore: processing data for table "coexistence.knowledge_chunks"
+pg_restore: processing data for table "coexistence.knowledge_documents"
+pg_restore: processing data for table "coexistence.media_library"
+pg_restore: processing data for table "coexistence.media_meta_sync"
+pg_restore: processing data for table "coexistence.media_objects"
+pg_restore: processing data for table "coexistence.message_reactions"
+pg_restore: processing data for table "coexistence.message_template_analytics_daily"
+pg_restore: processing data for table "coexistence.message_template_revisions"
+pg_restore: processing data for table "coexistence.message_templates"
+pg_restore: processing data for table "coexistence.pipeline_stages"
+pg_restore: processing data for table "coexistence.pipelines"
+pg_restore: processing data for table "coexistence.retarget_customers"
+pg_restore: processing data for table "coexistence.retarget_sheet_settings"
+pg_restore: processing data for table "coexistence.retarget_sync_log"
+pg_restore: processing data for table "coexistence.shown_products"
+pg_restore: processing data for table "coexistence.tags"
+pg_restore: processing data for table "coexistence.team_members"
+pg_restore: processing data for table "coexistence.user_audit_log"
+pg_restore: processing data for table "coexistence.user_wa_assignments"
+pg_restore: processing data for table "coexistence.wa_links"
+pg_restore: processing data for table "coexistence.webhook_events"
+pg_restore: processing data for table "coexistence.whatsapp_accounts"
+pg_restore: from TOC entry 4534; 0 16666 TABLE DATA whatsapp_accounts postgres
+pg_restore: error: COPY failed for table "whatsapp_accounts": ERROR:  duplicate key value violates unique constraint "whatsapp_accounts_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY whatsapp_accounts, line 1
+pg_restore: executing SEQUENCE SET ai_models_id_seq
+pg_restore: executing SEQUENCE SET akchat_users_id_seq
+pg_restore: executing SEQUENCE SET automation_execution_steps_id_seq
+pg_restore: executing SEQUENCE SET automation_executions_id_seq
+pg_restore: executing SEQUENCE SET broadcast_logs_id_seq
+pg_restore: executing SEQUENCE SET broadcasts_id_seq
+pg_restore: executing SEQUENCE SET chat_history_id_seq
+pg_restore: executing SEQUENCE SET chatbots_id_seq
+pg_restore: executing SEQUENCE SET contacts_id_seq
+pg_restore: executing SEQUENCE SET conversation_messages_id_seq
+pg_restore: executing SEQUENCE SET customer_intent_history_id_seq
+pg_restore: executing SEQUENCE SET customer_intent_profiles_id_seq
+pg_restore: executing SEQUENCE SET customer_interests_id_seq
+pg_restore: executing SEQUENCE SET deals_id_seq
+pg_restore: executing SEQUENCE SET email_campaigns_id_seq
+pg_restore: executing SEQUENCE SET email_inbox_messages_id_seq
+pg_restore: executing SEQUENCE SET email_senders_id_seq
+pg_restore: executing SEQUENCE SET email_sheet_sources_id_seq
+pg_restore: executing SEQUENCE SET email_subscribers_id_seq
+pg_restore: executing SEQUENCE SET email_templates_id_seq
+pg_restore: executing SEQUENCE SET instagram_accounts_id_seq
+pg_restore: executing SEQUENCE SET instagram_ai_logs_id_seq
+pg_restore: executing SEQUENCE SET instagram_analytics_id_seq
+pg_restore: executing SEQUENCE SET instagram_campaign_messages_id_seq
+pg_restore: executing SEQUENCE SET instagram_campaigns_id_seq
+pg_restore: executing SEQUENCE SET instagram_contacts_id_seq
+pg_restore: executing SEQUENCE SET instagram_conversations_id_seq
+pg_restore: executing SEQUENCE SET instagram_messages_id_seq
+pg_restore: executing SEQUENCE SET instagram_notes_id_seq
+pg_restore: executing SEQUENCE SET instagram_settings_id_seq
+pg_restore: executing SEQUENCE SET instagram_tags_id_seq
+pg_restore: executing SEQUENCE SET instagram_templates_id_seq
+pg_restore: executing SEQUENCE SET instagram_workflow_execution_steps_id_seq
+pg_restore: executing SEQUENCE SET instagram_workflow_executions_id_seq
+pg_restore: executing SEQUENCE SET instagram_workflows_id_seq
+pg_restore: executing SEQUENCE SET knowledge_chunks_id_seq
+pg_restore: executing SEQUENCE SET knowledge_documents_id_seq
+pg_restore: executing SEQUENCE SET media_library_id_seq
+pg_restore: executing SEQUENCE SET media_meta_sync_id_seq
+pg_restore: executing SEQUENCE SET message_reactions_id_seq
+pg_restore: executing SEQUENCE SET message_template_revisions_id_seq
+pg_restore: executing SEQUENCE SET message_templates_id_seq
+pg_restore: executing SEQUENCE SET pipeline_stages_id_seq
+pg_restore: executing SEQUENCE SET pipelines_id_seq
+pg_restore: executing SEQUENCE SET retarget_customers_id_seq
+pg_restore: executing SEQUENCE SET retarget_sheet_settings_id_seq
+pg_restore: executing SEQUENCE SET retarget_sync_log_id_seq
+pg_restore: executing SEQUENCE SET shown_products_id_seq
+pg_restore: executing SEQUENCE SET user_audit_log_id_seq
+pg_restore: executing SEQUENCE SET user_wa_assignments_id_seq
+pg_restore: executing SEQUENCE SET wa_links_id_seq
+pg_restore: executing SEQUENCE SET webhook_events_id_seq
+pg_restore: executing SEQUENCE SET whatsapp_accounts_id_seq
+pg_restore: creating CONSTRAINT "coexistence.ai_models ai_models_pkey"
+pg_restore: creating CONSTRAINT "coexistence.akchat_users akchat_users_email_key"
+pg_restore: creating CONSTRAINT "coexistence.akchat_users akchat_users_pkey"
+pg_restore: from TOC entry 4130; 2606 16731 CONSTRAINT akchat_users akchat_users_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "akchat_users" are not allowed
+Command was: ALTER TABLE ONLY coexistence.akchat_users
+    ADD CONSTRAINT akchat_users_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.akchat_users akchat_users_username_key"
+pg_restore: creating CONSTRAINT "coexistence.automation_execution_steps automation_execution_steps_pkey"
+pg_restore: creating CONSTRAINT "coexistence.automation_executions automation_executions_pkey"
+pg_restore: creating CONSTRAINT "coexistence.broadcast_logs broadcast_logs_pkey"
+pg_restore: creating CONSTRAINT "coexistence.broadcasts broadcasts_pkey"
+pg_restore: from TOC entry 4085; 2606 16709 CONSTRAINT broadcasts broadcasts_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "broadcasts" are not allowed
+Command was: ALTER TABLE ONLY coexistence.broadcasts
+    ADD CONSTRAINT broadcasts_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.categories categories_pkey"
+pg_restore: creating CONSTRAINT "coexistence.chat_history chat_history_message_id_key"
+pg_restore: creating CONSTRAINT "coexistence.chat_history chat_history_pkey"
+pg_restore: creating CONSTRAINT "coexistence.chatbots chatbots_pkey"
+pg_restore: creating CONSTRAINT "coexistence.contact_field_definitions contact_field_definitions_pkey"
+pg_restore: creating CONSTRAINT "coexistence.contacts contacts_pkey"
+pg_restore: creating CONSTRAINT "coexistence.contacts contacts_wa_number_contact_number_key"
+pg_restore: creating CONSTRAINT "coexistence.conversation_messages conversation_messages_pkey"
+pg_restore: creating CONSTRAINT "coexistence.conversation_reads conversation_reads_pkey"
+pg_restore: creating CONSTRAINT "coexistence.customer_intent_history customer_intent_history_pkey"
+pg_restore: creating CONSTRAINT "coexistence.customer_intent_profiles customer_intent_profiles_pkey"
+pg_restore: creating CONSTRAINT "coexistence.customer_intent_profiles customer_intent_profiles_workspace_id_wa_number_contact_num_key"
+pg_restore: creating CONSTRAINT "coexistence.customer_interests customer_interests_pkey"
+pg_restore: creating CONSTRAINT "coexistence.deals deals_pkey"
+pg_restore: creating CONSTRAINT "coexistence.email_campaigns email_campaigns_pkey"
+pg_restore: creating CONSTRAINT "coexistence.email_inbox_messages email_inbox_messages_pkey"
+pg_restore: creating CONSTRAINT "coexistence.email_inbox_poll_state email_inbox_poll_state_pkey"
+pg_restore: creating CONSTRAINT "coexistence.email_senders email_senders_email_key"
+pg_restore: creating CONSTRAINT "coexistence.email_senders email_senders_pkey"
+pg_restore: creating CONSTRAINT "coexistence.email_sheet_sources email_sheet_sources_pkey"
+pg_restore: creating CONSTRAINT "coexistence.email_subscribers email_subscribers_email_key"
+pg_restore: creating CONSTRAINT "coexistence.email_subscribers email_subscribers_pkey"
+pg_restore: creating CONSTRAINT "coexistence.email_templates email_templates_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_accounts instagram_accounts_instagram_business_id_key"
+pg_restore: creating CONSTRAINT "coexistence.instagram_accounts instagram_accounts_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_ai_logs instagram_ai_logs_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_analytics instagram_analytics_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_campaign_messages instagram_campaign_messages_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_campaigns instagram_campaigns_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_contacts instagram_contacts_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_conversations instagram_conversations_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_messages instagram_messages_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_notes instagram_notes_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_settings instagram_settings_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_tags instagram_tags_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_templates instagram_templates_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_workflow_execution_steps instagram_workflow_execution_steps_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_workflow_executions instagram_workflow_executions_pkey"
+pg_restore: creating CONSTRAINT "coexistence.instagram_workflows instagram_workflows_pkey"
+pg_restore: creating CONSTRAINT "coexistence.knowledge_chunks knowledge_chunks_pkey"
+pg_restore: creating CONSTRAINT "coexistence.knowledge_documents knowledge_documents_pkey"
+pg_restore: creating CONSTRAINT "coexistence.media_library media_library_pkey"
+pg_restore: from TOC entry 4137; 2606 16735 CONSTRAINT media_library media_library_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "media_library" are not allowed
+Command was: ALTER TABLE ONLY coexistence.media_library
+    ADD CONSTRAINT media_library_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.media_meta_sync media_meta_sync_media_id_account_id_key"
+pg_restore: creating CONSTRAINT "coexistence.media_meta_sync media_meta_sync_pkey"
+pg_restore: creating CONSTRAINT "coexistence.media_objects media_objects_pkey"
+pg_restore: creating CONSTRAINT "coexistence.message_reactions message_reactions_pkey"
+pg_restore: creating CONSTRAINT "coexistence.message_reactions message_reactions_target_message_id_direction_key"
+pg_restore: creating CONSTRAINT "coexistence.message_template_analytics_daily message_template_analytics_daily_pkey"
+pg_restore: creating CONSTRAINT "coexistence.message_template_revisions message_template_revisions_pkey"
+pg_restore: creating CONSTRAINT "coexistence.message_templates message_templates_pkey"
+pg_restore: from TOC entry 4165; 2606 16751 CONSTRAINT message_templates message_templates_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "message_templates" are not allowed
+Command was: ALTER TABLE ONLY coexistence.message_templates
+    ADD CONSTRAINT message_templates_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.pipeline_stages pipeline_stages_pkey"
+pg_restore: creating CONSTRAINT "coexistence.pipelines pipelines_pkey"
+pg_restore: creating CONSTRAINT "coexistence.retarget_customers retarget_customers_pkey"
+pg_restore: creating CONSTRAINT "coexistence.retarget_sheet_settings retarget_sheet_settings_pkey"
+pg_restore: creating CONSTRAINT "coexistence.retarget_sync_log retarget_sync_log_pkey"
+pg_restore: creating CONSTRAINT "coexistence.shown_products shown_products_pkey"
+pg_restore: creating CONSTRAINT "coexistence.tags tags_pkey"
+pg_restore: creating CONSTRAINT "coexistence.team_members team_members_bda_id_key"
+pg_restore: creating CONSTRAINT "coexistence.team_members team_members_pkey"
+pg_restore: creating CONSTRAINT "coexistence.user_audit_log user_audit_log_pkey"
+pg_restore: creating CONSTRAINT "coexistence.user_wa_assignments user_wa_assignments_pkey"
+pg_restore: creating CONSTRAINT "coexistence.user_wa_assignments user_wa_assignments_user_id_wa_number_key"
+pg_restore: creating CONSTRAINT "coexistence.wa_links wa_links_pkey"
+pg_restore: creating CONSTRAINT "coexistence.wa_links wa_links_slug_key"
+pg_restore: creating CONSTRAINT "coexistence.webhook_events webhook_events_pkey"
+pg_restore: creating CONSTRAINT "coexistence.whatsapp_accounts whatsapp_accounts_phone_number_id_key"
+pg_restore: creating CONSTRAINT "coexistence.whatsapp_accounts whatsapp_accounts_pkey"
+pg_restore: from TOC entry 4207; 2606 16777 CONSTRAINT whatsapp_accounts whatsapp_accounts_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "whatsapp_accounts" are not allowed
+Command was: ALTER TABLE ONLY coexistence.whatsapp_accounts
+    ADD CONSTRAINT whatsapp_accounts_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating INDEX "coexistence.ai_models_provider_idx"
+pg_restore: creating INDEX "coexistence.idx_audit_action"
+pg_restore: creating INDEX "coexistence.idx_audit_actor"
+pg_restore: creating INDEX "coexistence.idx_audit_created"
+pg_restore: creating INDEX "coexistence.idx_audit_target"
+pg_restore: creating INDEX "coexistence.idx_automation_executions_automation_id"
+pg_restore: creating INDEX "coexistence.idx_automation_executions_started_at"
+pg_restore: creating INDEX "coexistence.idx_automation_executions_status"
+pg_restore: creating INDEX "coexistence.idx_broadcast_logs_broadcast_id"
+pg_restore: creating INDEX "coexistence.idx_broadcast_logs_sent_at"
+pg_restore: creating INDEX "coexistence.idx_broadcast_logs_wa_message_id"
+pg_restore: creating INDEX "coexistence.idx_broadcasts_created_at"
+pg_restore: creating INDEX "coexistence.idx_broadcasts_scheduled"
+pg_restore: creating INDEX "coexistence.idx_broadcasts_status"
+pg_restore: creating INDEX "coexistence.idx_chat_contact"
+pg_restore: creating INDEX "coexistence.idx_chat_history_context"
+pg_restore: creating INDEX "coexistence.idx_chat_history_starred"
+pg_restore: creating INDEX "coexistence.idx_chat_incoming"
+pg_restore: creating INDEX "coexistence.idx_chat_media_status"
+pg_restore: creating INDEX "coexistence.idx_chat_phone_number_id_contact"
+pg_restore: creating INDEX "coexistence.idx_chat_timestamp"
+pg_restore: creating INDEX "coexistence.idx_chat_wa_number"
+pg_restore: creating INDEX "coexistence.idx_chatbots_status"
+pg_restore: creating INDEX "coexistence.idx_contact_field_definitions_sort"
+pg_restore: creating INDEX "coexistence.idx_contacts_assigned_user"
+pg_restore: creating INDEX "coexistence.idx_contacts_custom_fields"
+pg_restore: creating INDEX "coexistence.idx_contacts_display_name"
+pg_restore: creating INDEX "coexistence.idx_contacts_lookup"
+pg_restore: creating INDEX "coexistence.idx_conversation_messages_customer_id"
+pg_restore: creating INDEX "coexistence.idx_customer_interests_customer"
+pg_restore: creating INDEX "coexistence.idx_customer_interests_dedupe"
+pg_restore: creating INDEX "coexistence.idx_customer_interests_status"
+pg_restore: creating INDEX "coexistence.idx_deals_assigned"
+pg_restore: creating INDEX "coexistence.idx_deals_pipeline"
+pg_restore: creating INDEX "coexistence.idx_deals_pipeline_position"
+pg_restore: creating INDEX "coexistence.idx_deals_stage"
+pg_restore: creating INDEX "coexistence.idx_deals_status"
+pg_restore: creating INDEX "coexistence.idx_deals_won_at"
+pg_restore: creating INDEX "coexistence.idx_email_campaigns_created_at"
+pg_restore: creating INDEX "coexistence.idx_email_inbox_contact_email"
+pg_restore: creating INDEX "coexistence.idx_email_inbox_created_at"
+pg_restore: creating INDEX "coexistence.idx_email_inbox_message_id"
+pg_restore: creating INDEX "coexistence.idx_email_subscribers_created_at"
+pg_restore: creating INDEX "coexistence.idx_email_subscribers_status"
+pg_restore: creating INDEX "coexistence.idx_execution_steps_exec_wa_status"
+pg_restore: creating INDEX "coexistence.idx_execution_steps_execution_id"
+pg_restore: creating INDEX "coexistence.idx_execution_steps_node_id"
+pg_restore: creating INDEX "coexistence.idx_execution_steps_wa_msg_id"
+pg_restore: creating INDEX "coexistence.idx_execution_steps_wa_status"
+pg_restore: creating INDEX "coexistence.idx_executions_resume_lookup"
+pg_restore: creating INDEX "coexistence.idx_intent_history_customer"
+pg_restore: creating INDEX "coexistence.idx_intent_profiles_intent"
+pg_restore: creating INDEX "coexistence.idx_intent_profiles_score"
+pg_restore: creating INDEX "coexistence.idx_knowledge_chunks_document_id"
+pg_restore: creating INDEX "coexistence.idx_knowledge_chunks_embedding"
+pg_restore: creating INDEX "coexistence.idx_knowledge_chunks_workspace_id"
+pg_restore: creating INDEX "coexistence.idx_knowledge_documents_workspace_id"
+pg_restore: creating INDEX "coexistence.idx_media_library_account"
+pg_restore: creating INDEX "coexistence.idx_media_library_type"
+pg_restore: creating INDEX "coexistence.idx_media_library_uploaded_at"
+pg_restore: creating INDEX "coexistence.idx_media_meta_sync_account"
+pg_restore: creating INDEX "coexistence.idx_media_meta_sync_expiring"
+pg_restore: creating INDEX "coexistence.idx_message_reactions_convo"
+pg_restore: creating INDEX "coexistence.idx_message_reactions_target"
+pg_restore: creating INDEX "coexistence.idx_message_templates_category"
+pg_restore: creating INDEX "coexistence.idx_message_templates_group_key"
+pg_restore: creating INDEX "coexistence.idx_message_templates_language"
+pg_restore: creating INDEX "coexistence.idx_message_templates_name"
+pg_restore: creating INDEX "coexistence.idx_message_templates_status"
+pg_restore: creating INDEX "coexistence.idx_message_templates_whatsapp_account"
+pg_restore: creating INDEX "coexistence.idx_pipeline_stages_pipeline"
+pg_restore: creating INDEX "coexistence.idx_retarget_customers_created_at"
+pg_restore: creating INDEX "coexistence.idx_retarget_customers_phone"
+pg_restore: creating INDEX "coexistence.idx_retarget_customers_status"
+pg_restore: creating INDEX "coexistence.idx_retarget_sync_log_started_at"
+pg_restore: creating INDEX "coexistence.idx_shown_products_customer_id"
+pg_restore: creating INDEX "coexistence.idx_team_members_bda_id"
+pg_restore: creating INDEX "coexistence.idx_template_analytics_day"
+pg_restore: creating INDEX "coexistence.idx_template_revisions_template"
+pg_restore: creating INDEX "coexistence.idx_user_wa_assignments_wa"
+pg_restore: creating INDEX "coexistence.idx_wa_links_created_at"
+pg_restore: creating INDEX "coexistence.idx_wa_links_slug"
+pg_restore: creating INDEX "coexistence.idx_webhook_events_kind"
+pg_restore: creating INDEX "coexistence.idx_webhook_events_phone"
+pg_restore: creating INDEX "coexistence.idx_webhook_events_received"
+pg_restore: creating INDEX "coexistence.idx_webhook_events_status"
+pg_restore: creating INDEX "coexistence.idx_webhook_events_subtype"
+pg_restore: creating INDEX "coexistence.idx_whatsapp_accounts_one_default"
+pg_restore: creating INDEX "coexistence.idx_whatsapp_accounts_phone_number_id"
+pg_restore: creating INDEX "coexistence.whatsapp_accounts_singleton"
+pg_restore: creating FK CONSTRAINT "coexistence.akchat_users akchat_users_created_by_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.automation_execution_steps automation_execution_steps_execution_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.automation_executions automation_executions_automation_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.broadcast_logs broadcast_logs_broadcast_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.broadcasts broadcasts_template_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.contacts contacts_assigned_user_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.deals deals_assigned_user_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.deals deals_created_by_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.deals deals_pipeline_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.deals deals_stage_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.email_campaigns email_campaigns_template_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.email_inbox_messages email_inbox_messages_subscriber_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.email_subscribers email_subscribers_source_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_ai_logs instagram_ai_logs_conversation_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_campaign_messages instagram_campaign_messages_campaign_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_campaign_messages instagram_campaign_messages_contact_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_campaigns instagram_campaigns_instagram_account_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_contacts instagram_contacts_instagram_account_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_conversations instagram_conversations_contact_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_conversations instagram_conversations_instagram_account_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_messages instagram_messages_conversation_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_notes instagram_notes_contact_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_tags instagram_tags_contact_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_templates instagram_templates_instagram_account_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_workflow_execution_steps instagram_workflow_execution_steps_execution_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_workflow_executions instagram_workflow_executions_workflow_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_workflows instagram_workflows_instagram_account_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.knowledge_chunks knowledge_chunks_document_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.media_library media_library_whatsapp_account_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.media_meta_sync media_meta_sync_account_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.media_meta_sync media_meta_sync_media_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.message_template_analytics_daily message_template_analytics_daily_template_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.message_template_revisions message_template_revisions_template_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.message_templates message_templates_whatsapp_account_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.pipeline_stages pipeline_stages_pipeline_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.pipelines pipelines_created_by_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.tags tags_category_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.user_audit_log user_audit_log_actor_user_id_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.user_wa_assignments user_wa_assignments_created_by_fkey"
+pg_restore: creating FK CONSTRAINT "coexistence.user_wa_assignments user_wa_assignments_user_id_fkey"
+pg_restore: warning: errors ignored on restore: 24

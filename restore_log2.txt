@@ -1,0 +1,3246 @@
+pg_restore: connecting to database for restore
+pg_restore: creating SCHEMA "coexistence"
+pg_restore: while PROCESSING TOC:
+pg_restore: from TOC entry 7; 2615 16388 SCHEMA coexistence postgres
+pg_restore: error: could not execute query: ERROR:  schema "coexistence" already exists
+Command was: CREATE SCHEMA coexistence;
+
+
+pg_restore: creating EXTENSION "vector"
+pg_restore: creating COMMENT "EXTENSION vector"
+pg_restore: creating TABLE "coexistence.ai_models"
+pg_restore: from TOC entry 216; 1259 16389 TABLE ai_models postgres
+pg_restore: error: could not execute query: ERROR:  relation "ai_models" already exists
+Command was: CREATE TABLE coexistence.ai_models (
+    id integer NOT NULL,
+    provider text NOT NULL,
+    label text,
+    api_key_encrypted text NOT NULL,
+    available_models jsonb DEFAULT '[]'::jsonb NOT NULL,
+    last_synced_at timestamp with time zone,
+    last_sync_error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    enabled_models jsonb,
+    base_url text
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.ai_models_id_seq"
+pg_restore: from TOC entry 217; 1259 16397 SEQUENCE ai_models_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "ai_models_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.ai_models_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.ai_models_id_seq"
+pg_restore: creating TABLE "coexistence.akchat_users"
+pg_restore: from TOC entry 237; 1259 16513 TABLE akchat_users postgres
+pg_restore: error: could not execute query: ERROR:  relation "akchat_users" already exists
+Command was: CREATE TABLE coexistence.akchat_users (
+    id bigint NOT NULL,
+    username text NOT NULL,
+    email text NOT NULL,
+    password text NOT NULL,
+    display_name text,
+    role text DEFAULT 'viewer'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    permissions jsonb,
+    last_login_at timestamp with time zone,
+    created_by bigint,
+    CONSTRAINT akchat_users_role_check CHECK ((role = ANY (ARRAY['admin'::text, 'bda_sales'::text, 'viewer'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.akchat_users_id_seq"
+pg_restore: from TOC entry 238; 1259 16523 SEQUENCE akchat_users_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "akchat_users_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.akchat_users_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.akchat_users_id_seq"
+pg_restore: creating TABLE "coexistence.automation_execution_steps"
+pg_restore: from TOC entry 218; 1259 16398 TABLE automation_execution_steps postgres
+pg_restore: error: could not execute query: ERROR:  relation "automation_execution_steps" already exists
+Command was: CREATE TABLE coexistence.automation_execution_steps (
+    id bigint NOT NULL,
+    execution_id bigint NOT NULL,
+    node_id text NOT NULL,
+    node_type character varying(32) NOT NULL,
+    node_name text,
+    input_data jsonb DEFAULT '{}'::jsonb NOT NULL,
+    output_data jsonb DEFAULT '{}'::jsonb NOT NULL,
+    status character varying(16) DEFAULT 'running'::character varying NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    error_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    wa_message_id text,
+    wa_message_status character varying(16),
+    CONSTRAINT automation_execution_steps_status_check CHECK (((status)::text = ANY (ARRAY[('queued'::character varying)::text, ('running'::character varying)::text, ('success'::character varying)::text, ('error'::character varying)::text, ('skipped'::character varying)::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.automation_execution_steps_id_seq"
+pg_restore: from TOC entry 219; 1259 16409 SEQUENCE automation_execution_steps_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "automation_execution_steps_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.automation_execution_steps_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.automation_execution_steps_id_seq"
+pg_restore: creating TABLE "coexistence.automation_executions"
+pg_restore: from TOC entry 220; 1259 16410 TABLE automation_executions postgres
+pg_restore: error: could not execute query: ERROR:  relation "automation_executions" already exists
+Command was: CREATE TABLE coexistence.automation_executions (
+    id bigint NOT NULL,
+    automation_id bigint NOT NULL,
+    status character varying(16) DEFAULT 'running'::character varying NOT NULL,
+    trigger_type character varying(32) NOT NULL,
+    trigger_data jsonb DEFAULT '{}'::jsonb NOT NULL,
+    contact_number text,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    error_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    awaiting_node_id text,
+    paused_at timestamp with time zone,
+    expires_at timestamp with time zone,
+    wa_number text,
+    CONSTRAINT automation_executions_status_check CHECK (((status)::text = ANY (ARRAY[('queued'::character varying)::text, ('running'::character varying)::text, ('success'::character varying)::text, ('error'::character varying)::text, ('cancelled'::character varying)::text, ('paused'::character varying)::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.automation_executions_id_seq"
+pg_restore: from TOC entry 221; 1259 16420 SEQUENCE automation_executions_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "automation_executions_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.automation_executions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.automation_executions_id_seq"
+pg_restore: creating TABLE "coexistence.broadcast_logs"
+pg_restore: from TOC entry 222; 1259 16421 TABLE broadcast_logs postgres
+pg_restore: error: could not execute query: ERROR:  relation "broadcast_logs" already exists
+Command was: CREATE TABLE coexistence.broadcast_logs (
+    id integer NOT NULL,
+    broadcast_id integer NOT NULL,
+    action character varying(16) NOT NULL,
+    sent_to text NOT NULL,
+    status character varying(16) DEFAULT 'PENDING'::character varying NOT NULL,
+    sent_at timestamp with time zone DEFAULT now(),
+    wa_message_id text,
+    error_message text,
+    CONSTRAINT broadcast_logs_action_check CHECK (((action)::text = ANY (ARRAY[('TEST'::character varying)::text, ('BROADCAST'::character varying)::text]))),
+    CONSTRAINT broadcast_logs_status_check CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('SENT'::character varying)::text, ('FAILED'::character varying)::text, ('sent'::character varying)::text, ('delivered'::character varying)::text, ('read'::character varying)::text, ('failed'::character varying)::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.broadcast_logs_id_seq"
+pg_restore: from TOC entry 223; 1259 16430 SEQUENCE broadcast_logs_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "broadcast_logs_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.broadcast_logs_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.broadcast_logs_id_seq"
+pg_restore: creating TABLE "coexistence.broadcasts"
+pg_restore: from TOC entry 224; 1259 16431 TABLE broadcasts postgres
+pg_restore: error: could not execute query: ERROR:  relation "broadcasts" already exists
+Command was: CREATE TABLE coexistence.broadcasts (
+    id integer NOT NULL,
+    from_number text NOT NULL,
+    recipient_numbers jsonb DEFAULT '[]'::jsonb NOT NULL,
+    template_id integer,
+    status character varying(16) DEFAULT 'DRAFT'::character varying NOT NULL,
+    test_number text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    name text,
+    variable_mapping jsonb DEFAULT '{}'::jsonb,
+    message_type text DEFAULT 'template'::text NOT NULL,
+    body text,
+    url text,
+    media_library_id bigint,
+    caption text,
+    scheduled_at timestamp with time zone,
+    CONSTRAINT broadcasts_status_check CHECK (((status)::text = ANY (ARRAY[('DRAFT'::character varying)::text, ('SCHEDULED'::character varying)::text, ('SENDING'::character varying)::text, ('SENT'::character varying)::text, ('PARTIAL'::character varying)::text, ('FAILED'::character varying)::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.broadcasts_id_seq"
+pg_restore: from TOC entry 225; 1259 16443 SEQUENCE broadcasts_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "broadcasts_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.broadcasts_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.broadcasts_id_seq"
+pg_restore: creating TABLE "coexistence.categories"
+pg_restore: from TOC entry 226; 1259 16444 TABLE categories postgres
+pg_restore: error: could not execute query: ERROR:  relation "categories" already exists
+Command was: CREATE TABLE coexistence.categories (
+    id text NOT NULL,
+    name text NOT NULL,
+    description text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating TABLE "coexistence.chat_history"
+pg_restore: from TOC entry 227; 1259 16451 TABLE chat_history postgres
+pg_restore: error: could not execute query: ERROR:  relation "chat_history" already exists
+Command was: CREATE TABLE coexistence.chat_history (
+    id bigint NOT NULL,
+    message_id text NOT NULL,
+    phone_number_id text,
+    wa_number text NOT NULL,
+    contact_number text NOT NULL,
+    to_number text,
+    direction text NOT NULL,
+    message_type text DEFAULT 'unknown'::text NOT NULL,
+    message_body text,
+    raw_payload jsonb,
+    media_url text,
+    media_mime_type text,
+    status text DEFAULT 'received'::text,
+    "timestamp" timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    media_storage_path text,
+    media_status text,
+    media_size_bytes bigint,
+    media_filename text,
+    media_error text,
+    media_downloaded_at timestamp with time zone,
+    error_message text,
+    template_meta jsonb,
+    context_message_id text,
+    starred boolean DEFAULT false NOT NULL,
+    CONSTRAINT chat_history_direction_check CHECK ((direction = ANY (ARRAY['incoming'::text, 'outgoing'::text]))),
+    CONSTRAINT chat_history_status_check CHECK ((status = ANY (ARRAY['received'::text, 'sending'::text, 'sent'::text, 'delivered'::text, 'read'::text, 'failed'::text, 'error'::text, 'unknown'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.chat_history_id_seq"
+pg_restore: from TOC entry 228; 1259 16462 SEQUENCE chat_history_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "chat_history_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.chat_history_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.chat_history_id_seq"
+pg_restore: creating TABLE "coexistence.chatbots"
+pg_restore: from TOC entry 229; 1259 16463 TABLE chatbots postgres
+pg_restore: error: could not execute query: ERROR:  relation "chatbots" already exists
+Command was: CREATE TABLE coexistence.chatbots (
+    id bigint NOT NULL,
+    name text NOT NULL,
+    description text,
+    status text DEFAULT 'draft'::text NOT NULL,
+    trigger_type text DEFAULT 'keyword'::text NOT NULL,
+    config jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.chatbots_id_seq"
+pg_restore: from TOC entry 230; 1259 16473 SEQUENCE chatbots_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "chatbots_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.chatbots_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.chatbots_id_seq"
+pg_restore: creating TABLE "coexistence.contact_field_definitions"
+pg_restore: from TOC entry 231; 1259 16474 TABLE contact_field_definitions postgres
+pg_restore: error: could not execute query: ERROR:  relation "contact_field_definitions" already exists
+Command was: CREATE TABLE coexistence.contact_field_definitions (
+    id text NOT NULL,
+    name text NOT NULL,
+    description text,
+    field_type text NOT NULL,
+    sort_order integer DEFAULT 0,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT contact_field_definitions_field_type_check CHECK ((field_type = ANY (ARRAY['text'::text, 'number'::text, 'phone'::text, 'email'::text, 'date'::text, 'url'::text, 'textarea'::text])))
+);
+
+
+pg_restore: creating TABLE "coexistence.contacts"
+pg_restore: from TOC entry 232; 1259 16483 TABLE contacts postgres
+pg_restore: error: could not execute query: ERROR:  relation "contacts" already exists
+Command was: CREATE TABLE coexistence.contacts (
+    id bigint NOT NULL,
+    wa_number text NOT NULL,
+    contact_number text NOT NULL,
+    name text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    tags jsonb DEFAULT '[]'::jsonb,
+    custom_fields jsonb DEFAULT '{}'::jsonb,
+    assigned_user_id bigint,
+    profile_name text,
+    ai_paused boolean DEFAULT false NOT NULL,
+    ai_paused_at timestamp with time zone,
+    ai_paused_by_user integer,
+    last_agent_reply_at timestamp with time zone,
+    last_agent_reply_by integer
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.contacts_id_seq"
+pg_restore: from TOC entry 233; 1259 16493 SEQUENCE contacts_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "contacts_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.contacts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.contacts_id_seq"
+pg_restore: creating TABLE "coexistence.conversation_messages"
+pg_restore: from TOC entry 322; 1259 82468 TABLE conversation_messages postgres
+pg_restore: error: could not execute query: ERROR:  relation "conversation_messages" already exists
+Command was: CREATE TABLE coexistence.conversation_messages (
+    id bigint NOT NULL,
+    customer_id text NOT NULL,
+    direction text NOT NULL,
+    message_text text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    detected_intent text,
+    intent_confidence numeric(5,2),
+    CONSTRAINT conversation_messages_direction_check CHECK ((direction = ANY (ARRAY['incoming'::text, 'outgoing'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.conversation_messages_id_seq"
+pg_restore: from TOC entry 323; 1259 82475 SEQUENCE conversation_messages_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "conversation_messages_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.conversation_messages_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.conversation_messages_id_seq"
+pg_restore: creating TABLE "coexistence.conversation_reads"
+pg_restore: from TOC entry 234; 1259 16494 TABLE conversation_reads postgres
+pg_restore: error: could not execute query: ERROR:  relation "conversation_reads" already exists
+Command was: CREATE TABLE coexistence.conversation_reads (
+    wa_number text NOT NULL,
+    contact_number text NOT NULL,
+    last_read_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating TABLE "coexistence.customer_intent_history"
+pg_restore: from TOC entry 329; 1259 123462 TABLE customer_intent_history postgres
+pg_restore: error: could not execute query: ERROR:  relation "customer_intent_history" already exists
+Command was: CREATE TABLE coexistence.customer_intent_history (
+    id bigint NOT NULL,
+    workspace_id bigint DEFAULT 1 NOT NULL,
+    wa_number text NOT NULL,
+    contact_number text NOT NULL,
+    previous_intent text,
+    new_intent text NOT NULL,
+    previous_score integer,
+    new_score integer NOT NULL,
+    trigger_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.customer_intent_history_id_seq"
+pg_restore: from TOC entry 328; 1259 123461 SEQUENCE customer_intent_history_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "customer_intent_history_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.customer_intent_history_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.customer_intent_history_id_seq"
+pg_restore: creating TABLE "coexistence.customer_intent_profiles"
+pg_restore: from TOC entry 327; 1259 123441 TABLE customer_intent_profiles postgres
+pg_restore: error: could not execute query: ERROR:  relation "customer_intent_profiles" already exists
+Command was: CREATE TABLE coexistence.customer_intent_profiles (
+    id bigint NOT NULL,
+    workspace_id bigint DEFAULT 1 NOT NULL,
+    wa_number text NOT NULL,
+    contact_number text NOT NULL,
+    current_intent text DEFAULT 'JUST_BROWSING'::text NOT NULL,
+    buying_score integer DEFAULT 0 NOT NULL,
+    intent_confidence numeric(5,2),
+    products_viewed_count integer DEFAULT 0 NOT NULL,
+    last_activity timestamp with time zone,
+    last_intent_update timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT customer_intent_profiles_buying_score_check CHECK (((buying_score >= 0) AND (buying_score <= 100)))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.customer_intent_profiles_id_seq"
+pg_restore: from TOC entry 326; 1259 123440 SEQUENCE customer_intent_profiles_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "customer_intent_profiles_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.customer_intent_profiles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.customer_intent_profiles_id_seq"
+pg_restore: creating TABLE "coexistence.customer_interests"
+pg_restore: from TOC entry 324; 1259 82482 TABLE customer_interests postgres
+pg_restore: error: could not execute query: ERROR:  relation "customer_interests" already exists
+Command was: CREATE TABLE coexistence.customer_interests (
+    id bigint NOT NULL,
+    workspace_id bigint NOT NULL,
+    customer_number text NOT NULL,
+    product_sku text NOT NULL,
+    product_category text,
+    product_color text,
+    status text DEFAULT 'open'::text NOT NULL,
+    matched_sku text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT customer_interests_status_check CHECK ((status = ANY (ARRAY['open'::text, 'match_found'::text, 'contacted'::text, 'dismissed'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.customer_interests_id_seq"
+pg_restore: from TOC entry 325; 1259 82491 SEQUENCE customer_interests_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "customer_interests_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.customer_interests_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.customer_interests_id_seq"
+pg_restore: creating TABLE "coexistence.deals"
+pg_restore: from TOC entry 235; 1259 16500 TABLE deals postgres
+pg_restore: error: could not execute query: ERROR:  relation "deals" already exists
+Command was: CREATE TABLE coexistence.deals (
+    id bigint NOT NULL,
+    pipeline_id bigint NOT NULL,
+    stage_id bigint NOT NULL,
+    title text NOT NULL,
+    value numeric(14,2) DEFAULT 0 NOT NULL,
+    currency text DEFAULT 'INR'::text NOT NULL,
+    status text DEFAULT 'open'::text NOT NULL,
+    assigned_user_id bigint,
+    contact_wa_number text,
+    contact_number text,
+    contact_name text,
+    expected_close_date date,
+    notes text,
+    "position" integer DEFAULT 0 NOT NULL,
+    won_at timestamp with time zone,
+    lost_at timestamp with time zone,
+    created_by bigint,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT deals_status_check CHECK ((status = ANY (ARRAY['open'::text, 'won'::text, 'lost'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.deals_id_seq"
+pg_restore: from TOC entry 236; 1259 16512 SEQUENCE deals_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "deals_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.deals_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.deals_id_seq"
+pg_restore: creating TABLE "coexistence.email_campaigns"
+pg_restore: from TOC entry 308; 1259 24652 TABLE email_campaigns postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_campaigns" already exists
+Command was: CREATE TABLE coexistence.email_campaigns (
+    id bigint NOT NULL,
+    template_id bigint,
+    subject text NOT NULL,
+    recipient_count integer DEFAULT 0 NOT NULL,
+    sent_count integer DEFAULT 0 NOT NULL,
+    failed_count integer DEFAULT 0 NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    error_message text,
+    started_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.email_campaigns_id_seq"
+pg_restore: from TOC entry 307; 1259 24651 SEQUENCE email_campaigns_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_campaigns_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.email_campaigns_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_campaigns_id_seq"
+pg_restore: creating TABLE "coexistence.email_inbox_messages"
+pg_restore: from TOC entry 312; 1259 40992 TABLE email_inbox_messages postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_inbox_messages" already exists
+Command was: CREATE TABLE coexistence.email_inbox_messages (
+    id bigint NOT NULL,
+    subscriber_id bigint,
+    contact_email text NOT NULL,
+    contact_name text,
+    direction text DEFAULT 'inbound'::text NOT NULL,
+    subject text,
+    body_text text,
+    body_html text,
+    is_read boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    message_id text
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.email_inbox_messages_id_seq"
+pg_restore: from TOC entry 311; 1259 40991 SEQUENCE email_inbox_messages_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_inbox_messages_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.email_inbox_messages_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_inbox_messages_id_seq"
+pg_restore: creating TABLE "coexistence.email_inbox_poll_state"
+pg_restore: from TOC entry 313; 1259 41137 TABLE email_inbox_poll_state postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_inbox_poll_state" already exists
+Command was: CREATE TABLE coexistence.email_inbox_poll_state (
+    id integer DEFAULT 1 NOT NULL,
+    last_uid bigint DEFAULT 0 NOT NULL
+);
+
+
+pg_restore: creating TABLE "coexistence.email_senders"
+pg_restore: from TOC entry 315; 1259 49328 TABLE email_senders postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_senders" already exists
+Command was: CREATE TABLE coexistence.email_senders (
+    id bigint NOT NULL,
+    name text NOT NULL,
+    email text NOT NULL,
+    is_default boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.email_senders_id_seq"
+pg_restore: from TOC entry 314; 1259 49327 SEQUENCE email_senders_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_senders_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.email_senders_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_senders_id_seq"
+pg_restore: creating TABLE "coexistence.email_sheet_sources"
+pg_restore: from TOC entry 310; 1259 32769 TABLE email_sheet_sources postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_sheet_sources" already exists
+Command was: CREATE TABLE coexistence.email_sheet_sources (
+    id bigint NOT NULL,
+    name text NOT NULL,
+    sheet_url text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.email_sheet_sources_id_seq"
+pg_restore: from TOC entry 309; 1259 32768 SEQUENCE email_sheet_sources_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_sheet_sources_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.email_sheet_sources_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_sheet_sources_id_seq"
+pg_restore: creating TABLE "coexistence.email_subscribers"
+pg_restore: from TOC entry 304; 1259 24623 TABLE email_subscribers postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_subscribers" already exists
+Command was: CREATE TABLE coexistence.email_subscribers (
+    id bigint NOT NULL,
+    name text,
+    email text NOT NULL,
+    source text DEFAULT 'manual'::text,
+    tags jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    source_id bigint
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.email_subscribers_id_seq"
+pg_restore: from TOC entry 303; 1259 24622 SEQUENCE email_subscribers_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_subscribers_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.email_subscribers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_subscribers_id_seq"
+pg_restore: creating TABLE "coexistence.email_templates"
+pg_restore: from TOC entry 306; 1259 24641 TABLE email_templates postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_templates" already exists
+Command was: CREATE TABLE coexistence.email_templates (
+    id bigint NOT NULL,
+    title text NOT NULL,
+    subject text NOT NULL,
+    html_body text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.email_templates_id_seq"
+pg_restore: from TOC entry 305; 1259 24640 SEQUENCE email_templates_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_templates_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.email_templates_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.email_templates_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_accounts"
+pg_restore: from TOC entry 268; 1259 16980 TABLE instagram_accounts postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_accounts" already exists
+Command was: CREATE TABLE coexistence.instagram_accounts (
+    id bigint NOT NULL,
+    page_id text,
+    business_account_id text,
+    access_token text,
+    webhook_url text,
+    verify_token text,
+    app_secret text,
+    status text DEFAULT 'inactive'::text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    account_name text,
+    instagram_business_id text,
+    facebook_page_id text,
+    username text,
+    page_name text,
+    access_token_encrypted text,
+    refresh_token_encrypted text,
+    expires_at timestamp with time zone,
+    app_id text,
+    app_secret_encrypted text,
+    webhook_verify_token text,
+    profile_picture text,
+    connected_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_sync timestamp with time zone
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_accounts_id_seq"
+pg_restore: from TOC entry 267; 1259 16979 SEQUENCE instagram_accounts_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_accounts_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_accounts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_accounts_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_ai_logs"
+pg_restore: from TOC entry 294; 1259 17166 TABLE instagram_ai_logs postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_ai_logs" already exists
+Command was: CREATE TABLE coexistence.instagram_ai_logs (
+    id bigint NOT NULL,
+    conversation_id bigint,
+    prompt text,
+    response text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_ai_logs_id_seq"
+pg_restore: from TOC entry 293; 1259 17165 SEQUENCE instagram_ai_logs_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_ai_logs_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_ai_logs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_ai_logs_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_analytics"
+pg_restore: from TOC entry 296; 1259 17181 TABLE instagram_analytics postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_analytics" already exists
+Command was: CREATE TABLE coexistence.instagram_analytics (
+    id bigint NOT NULL,
+    metric text NOT NULL,
+    value numeric DEFAULT 0,
+    recorded_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_analytics_id_seq"
+pg_restore: from TOC entry 295; 1259 17180 SEQUENCE instagram_analytics_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_analytics_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_analytics_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_analytics_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_campaign_messages"
+pg_restore: from TOC entry 280; 1259 17059 TABLE instagram_campaign_messages postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_campaign_messages" already exists
+Command was: CREATE TABLE coexistence.instagram_campaign_messages (
+    id bigint NOT NULL,
+    campaign_id bigint,
+    contact_id bigint,
+    status text DEFAULT 'pending'::text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_campaign_messages_id_seq"
+pg_restore: from TOC entry 279; 1259 17058 SEQUENCE instagram_campaign_messages_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_campaign_messages_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_campaign_messages_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_campaign_messages_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_campaigns"
+pg_restore: from TOC entry 278; 1259 17047 TABLE instagram_campaigns postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_campaigns" already exists
+Command was: CREATE TABLE coexistence.instagram_campaigns (
+    id bigint NOT NULL,
+    name text NOT NULL,
+    status text DEFAULT 'draft'::text,
+    scheduled_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    instagram_account_id bigint
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_campaigns_id_seq"
+pg_restore: from TOC entry 277; 1259 17046 SEQUENCE instagram_campaigns_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_campaigns_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_campaigns_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_campaigns_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_contacts"
+pg_restore: from TOC entry 270; 1259 16992 TABLE instagram_contacts postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_contacts" already exists
+Command was: CREATE TABLE coexistence.instagram_contacts (
+    id bigint NOT NULL,
+    ig_user_id text NOT NULL,
+    username text,
+    display_name text,
+    profile_picture text,
+    last_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    instagram_account_id bigint
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_contacts_id_seq"
+pg_restore: from TOC entry 269; 1259 16991 SEQUENCE instagram_contacts_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_contacts_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_contacts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_contacts_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_conversations"
+pg_restore: from TOC entry 272; 1259 17003 TABLE instagram_conversations postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_conversations" already exists
+Command was: CREATE TABLE coexistence.instagram_conversations (
+    id bigint NOT NULL,
+    contact_id bigint,
+    status text DEFAULT 'open'::text,
+    assignee_id bigint,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    instagram_account_id bigint
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_conversations_id_seq"
+pg_restore: from TOC entry 271; 1259 17002 SEQUENCE instagram_conversations_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_conversations_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_conversations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_conversations_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_messages"
+pg_restore: from TOC entry 274; 1259 17020 TABLE instagram_messages postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_messages" already exists
+Command was: CREATE TABLE coexistence.instagram_messages (
+    id bigint NOT NULL,
+    conversation_id bigint,
+    direction text NOT NULL,
+    content text,
+    media_url text,
+    status text DEFAULT 'sent'::text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_messages_id_seq"
+pg_restore: from TOC entry 273; 1259 17019 SEQUENCE instagram_messages_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_messages_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_messages_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_messages_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_notes"
+pg_restore: from TOC entry 290; 1259 17141 TABLE instagram_notes postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_notes" already exists
+Command was: CREATE TABLE coexistence.instagram_notes (
+    id bigint NOT NULL,
+    contact_id bigint,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_notes_id_seq"
+pg_restore: from TOC entry 289; 1259 17140 SEQUENCE instagram_notes_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_notes_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_notes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_notes_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_settings"
+pg_restore: from TOC entry 292; 1259 17156 TABLE instagram_settings postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_settings" already exists
+Command was: CREATE TABLE coexistence.instagram_settings (
+    id bigint NOT NULL,
+    page_id text,
+    business_account_id text,
+    access_token text,
+    webhook_url text,
+    verify_token text,
+    app_secret text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_settings_id_seq"
+pg_restore: from TOC entry 291; 1259 17155 SEQUENCE instagram_settings_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_settings_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_settings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_settings_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_tags"
+pg_restore: from TOC entry 288; 1259 17127 TABLE instagram_tags postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_tags" already exists
+Command was: CREATE TABLE coexistence.instagram_tags (
+    id bigint NOT NULL,
+    contact_id bigint,
+    tag text NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_tags_id_seq"
+pg_restore: from TOC entry 287; 1259 17126 SEQUENCE instagram_tags_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_tags_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_tags_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_tags_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_templates"
+pg_restore: from TOC entry 276; 1259 17036 TABLE instagram_templates postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_templates" already exists
+Command was: CREATE TABLE coexistence.instagram_templates (
+    id bigint NOT NULL,
+    title text NOT NULL,
+    shortcut text,
+    message text,
+    category text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    instagram_account_id bigint
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_templates_id_seq"
+pg_restore: from TOC entry 275; 1259 17035 SEQUENCE instagram_templates_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_templates_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_templates_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_templates_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_workflow_execution_steps"
+pg_restore: from TOC entry 286; 1259 17110 TABLE instagram_workflow_execution_steps postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_workflow_execution_steps" already exists
+Command was: CREATE TABLE coexistence.instagram_workflow_execution_steps (
+    id bigint NOT NULL,
+    execution_id bigint,
+    node_id text,
+    node_type text,
+    status text DEFAULT 'success'::text,
+    result text,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    duration_ms integer DEFAULT 0
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_workflow_execution_steps_id_seq"
+pg_restore: from TOC entry 285; 1259 17109 SEQUENCE instagram_workflow_execution_steps_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_workflow_execution_steps_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_workflow_execution_steps_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_workflow_execution_steps_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_workflow_executions"
+pg_restore: from TOC entry 284; 1259 17094 TABLE instagram_workflow_executions postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_workflow_executions" already exists
+Command was: CREATE TABLE coexistence.instagram_workflow_executions (
+    id bigint NOT NULL,
+    workflow_id bigint,
+    status text DEFAULT 'running'::text,
+    trigger_source text,
+    contact_ref text,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    error_message text
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_workflow_executions_id_seq"
+pg_restore: from TOC entry 283; 1259 17093 SEQUENCE instagram_workflow_executions_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_workflow_executions_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_workflow_executions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_workflow_executions_id_seq"
+pg_restore: creating TABLE "coexistence.instagram_workflows"
+pg_restore: from TOC entry 282; 1259 17080 TABLE instagram_workflows postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_workflows" already exists
+Command was: CREATE TABLE coexistence.instagram_workflows (
+    id bigint NOT NULL,
+    name text NOT NULL,
+    description text,
+    status text DEFAULT 'draft'::text,
+    trigger_type text DEFAULT 'keyword'::text,
+    config jsonb DEFAULT '{}'::jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    instagram_account_id bigint
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.instagram_workflows_id_seq"
+pg_restore: from TOC entry 281; 1259 17079 SEQUENCE instagram_workflows_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_workflows_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.instagram_workflows_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.instagram_workflows_id_seq"
+pg_restore: creating TABLE "coexistence.knowledge_chunks"
+pg_restore: from TOC entry 318; 1259 82437 TABLE knowledge_chunks postgres
+pg_restore: error: could not execute query: ERROR:  relation "knowledge_chunks" already exists
+Command was: CREATE TABLE coexistence.knowledge_chunks (
+    id bigint NOT NULL,
+    document_id bigint NOT NULL,
+    workspace_id bigint NOT NULL,
+    chunk_text text NOT NULL,
+    embedding public.vector(1536),
+    token_count integer,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.knowledge_chunks_id_seq"
+pg_restore: from TOC entry 319; 1259 82443 SEQUENCE knowledge_chunks_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "knowledge_chunks_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.knowledge_chunks_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.knowledge_chunks_id_seq"
+pg_restore: creating TABLE "coexistence.knowledge_documents"
+pg_restore: from TOC entry 316; 1259 82423 TABLE knowledge_documents postgres
+pg_restore: error: could not execute query: ERROR:  relation "knowledge_documents" already exists
+Command was: CREATE TABLE coexistence.knowledge_documents (
+    id bigint NOT NULL,
+    workspace_id bigint NOT NULL,
+    source_type text DEFAULT 'manual'::text NOT NULL,
+    title text NOT NULL,
+    content text NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.knowledge_documents_id_seq"
+pg_restore: from TOC entry 317; 1259 82432 SEQUENCE knowledge_documents_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "knowledge_documents_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.knowledge_documents_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.knowledge_documents_id_seq"
+pg_restore: creating TABLE "coexistence.media_library"
+pg_restore: from TOC entry 239; 1259 16524 TABLE media_library postgres
+pg_restore: error: could not execute query: ERROR:  relation "media_library" already exists
+Command was: CREATE TABLE coexistence.media_library (
+    id bigint NOT NULL,
+    filename text NOT NULL,
+    original_name text NOT NULL,
+    mime_type text NOT NULL,
+    size_bytes bigint NOT NULL,
+    media_type text NOT NULL,
+    storage_backend text DEFAULT 'postgres'::text NOT NULL,
+    storage_key text NOT NULL,
+    sha256 text,
+    auto_resync boolean DEFAULT false NOT NULL,
+    notes text,
+    uploaded_by integer,
+    uploaded_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    name text,
+    whatsapp_account_id bigint,
+    CONSTRAINT media_library_media_type_check CHECK ((media_type = ANY (ARRAY['image'::text, 'video'::text, 'audio'::text, 'document'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.media_library_id_seq"
+pg_restore: from TOC entry 240; 1259 16533 SEQUENCE media_library_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "media_library_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.media_library_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.media_library_id_seq"
+pg_restore: creating TABLE "coexistence.media_meta_sync"
+pg_restore: from TOC entry 241; 1259 16534 TABLE media_meta_sync postgres
+pg_restore: error: could not execute query: ERROR:  relation "media_meta_sync" already exists
+Command was: CREATE TABLE coexistence.media_meta_sync (
+    id bigint NOT NULL,
+    media_id bigint NOT NULL,
+    account_id integer NOT NULL,
+    meta_media_id text,
+    synced_at timestamp with time zone,
+    expires_at timestamp with time zone,
+    status text DEFAULT 'pending'::text NOT NULL,
+    last_error text,
+    attempts integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT media_meta_sync_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'syncing'::text, 'synced'::text, 'failed'::text, 'expired'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.media_meta_sync_id_seq"
+pg_restore: from TOC entry 242; 1259 16543 SEQUENCE media_meta_sync_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "media_meta_sync_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.media_meta_sync_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.media_meta_sync_id_seq"
+pg_restore: creating TABLE "coexistence.media_objects"
+pg_restore: from TOC entry 243; 1259 16544 TABLE media_objects postgres
+pg_restore: error: could not execute query: ERROR:  relation "media_objects" already exists
+Command was: CREATE TABLE coexistence.media_objects (
+    object_key text NOT NULL,
+    data bytea NOT NULL,
+    mime_type text,
+    size_bytes bigint,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating TABLE "coexistence.message_reactions"
+pg_restore: from TOC entry 244; 1259 16550 TABLE message_reactions postgres
+pg_restore: error: could not execute query: ERROR:  relation "message_reactions" already exists
+Command was: CREATE TABLE coexistence.message_reactions (
+    id bigint NOT NULL,
+    wa_number text NOT NULL,
+    contact_number text NOT NULL,
+    target_message_id text NOT NULL,
+    direction text NOT NULL,
+    emoji text NOT NULL,
+    reactor text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT message_reactions_direction_check CHECK ((direction = ANY (ARRAY['incoming'::text, 'outgoing'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.message_reactions_id_seq"
+pg_restore: from TOC entry 245; 1259 16557 SEQUENCE message_reactions_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "message_reactions_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.message_reactions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.message_reactions_id_seq"
+pg_restore: creating TABLE "coexistence.message_template_analytics_daily"
+pg_restore: from TOC entry 246; 1259 16558 TABLE message_template_analytics_daily postgres
+pg_restore: error: could not execute query: ERROR:  relation "message_template_analytics_daily" already exists
+Command was: CREATE TABLE coexistence.message_template_analytics_daily (
+    template_id integer NOT NULL,
+    day date NOT NULL,
+    sent integer DEFAULT 0 NOT NULL,
+    delivered integer DEFAULT 0 NOT NULL,
+    read_count integer DEFAULT 0 NOT NULL,
+    clicked_total integer DEFAULT 0 NOT NULL,
+    clicked_by_button jsonb DEFAULT '[]'::jsonb NOT NULL,
+    last_fetched_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating TABLE "coexistence.message_template_revisions"
+pg_restore: from TOC entry 247; 1259 16569 TABLE message_template_revisions postgres
+pg_restore: error: could not execute query: ERROR:  relation "message_template_revisions" already exists
+Command was: CREATE TABLE coexistence.message_template_revisions (
+    id bigint NOT NULL,
+    template_id integer NOT NULL,
+    revised_at timestamp with time zone DEFAULT now() NOT NULL,
+    revised_by text,
+    source text DEFAULT 'manual_edit'::text NOT NULL,
+    change_summary text,
+    snapshot jsonb NOT NULL,
+    CONSTRAINT message_template_revisions_source_check CHECK ((source = ANY (ARRAY['manual_edit'::text, 'restore'::text, 'meta_sync'::text, 'initial'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.message_template_revisions_id_seq"
+pg_restore: from TOC entry 248; 1259 16577 SEQUENCE message_template_revisions_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "message_template_revisions_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.message_template_revisions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.message_template_revisions_id_seq"
+pg_restore: creating TABLE "coexistence.message_templates"
+pg_restore: from TOC entry 249; 1259 16578 TABLE message_templates postgres
+pg_restore: error: could not execute query: ERROR:  relation "message_templates" already exists
+Command was: CREATE TABLE coexistence.message_templates (
+    id integer NOT NULL,
+    name character varying(512) NOT NULL,
+    category character varying(32) NOT NULL,
+    language character varying(10) DEFAULT 'en'::character varying NOT NULL,
+    header_type character varying(16) DEFAULT 'NONE'::character varying NOT NULL,
+    header_text text,
+    media_handle text,
+    body text NOT NULL,
+    footer text,
+    buttons jsonb DEFAULT '[]'::jsonb,
+    samples jsonb DEFAULT '{}'::jsonb,
+    security_recommendation boolean DEFAULT false,
+    code_expiry_minutes integer,
+    allow_category_change boolean DEFAULT true,
+    status character varying(16) DEFAULT 'DRAFT'::character varying NOT NULL,
+    meta_template_id text,
+    submitted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    whatsapp_account_id bigint,
+    quality_score text,
+    rejection_reason text,
+    previous_category text,
+    last_synced_at timestamp with time zone,
+    template_group_key text,
+    header_media_library_id integer,
+    CONSTRAINT message_templates_category_check CHECK (((category)::text = ANY (ARRAY[('MARKETING'::character varying)::text, ('UTILITY'::character varying)::text, ('AUTHENTICATION'::character varying)::text]))),
+    CONSTRAINT message_templates_header_type_check CHECK (((header_type)::text = ANY (ARRAY[('NONE'::character varying)::text, ('TEXT'::character varying)::text, ('IMAGE'::character varying)::text, ('VIDEO'::character varying)::text, ('DOCUMENT'::character varying)::text]))),
+    CONSTRAINT message_templates_status_check CHECK (((status)::text = ANY (ARRAY[('DRAFT'::character varying)::text, ('SUBMITTED'::character varying)::text, ('APPROVED'::character varying)::text, ('REJECTED'::character varying)::text, ('PAUSED'::character varying)::text, ('DISABLED'::character varying)::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.message_templates_id_seq"
+pg_restore: from TOC entry 250; 1259 16595 SEQUENCE message_templates_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "message_templates_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.message_templates_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.message_templates_id_seq"
+pg_restore: creating TABLE "coexistence.pipeline_stages"
+pg_restore: from TOC entry 251; 1259 16596 TABLE pipeline_stages postgres
+pg_restore: error: could not execute query: ERROR:  relation "pipeline_stages" already exists
+Command was: CREATE TABLE coexistence.pipeline_stages (
+    id bigint NOT NULL,
+    pipeline_id bigint NOT NULL,
+    name text NOT NULL,
+    probability integer DEFAULT 0 NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    stage_type text DEFAULT 'open'::text NOT NULL,
+    color text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT pipeline_stages_probability_check CHECK (((probability >= 0) AND (probability <= 100))),
+    CONSTRAINT pipeline_stages_stage_type_check CHECK ((stage_type = ANY (ARRAY['open'::text, 'won'::text, 'lost'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.pipeline_stages_id_seq"
+pg_restore: from TOC entry 252; 1259 16608 SEQUENCE pipeline_stages_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "pipeline_stages_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.pipeline_stages_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.pipeline_stages_id_seq"
+pg_restore: creating TABLE "coexistence.pipelines"
+pg_restore: from TOC entry 253; 1259 16609 TABLE pipelines postgres
+pg_restore: error: could not execute query: ERROR:  relation "pipelines" already exists
+Command was: CREATE TABLE coexistence.pipelines (
+    id bigint NOT NULL,
+    name text NOT NULL,
+    is_default boolean DEFAULT false NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    created_by bigint,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.pipelines_id_seq"
+pg_restore: from TOC entry 254; 1259 16618 SEQUENCE pipelines_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "pipelines_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.pipelines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.pipelines_id_seq"
+pg_restore: creating TABLE "coexistence.retarget_customers"
+pg_restore: from TOC entry 298; 1259 24577 TABLE retarget_customers postgres
+pg_restore: error: could not execute query: ERROR:  relation "retarget_customers" already exists
+Command was: CREATE TABLE coexistence.retarget_customers (
+    id bigint NOT NULL,
+    name text,
+    phone text,
+    email text,
+    exit_url text,
+    retarget_type text,
+    "timestamp" timestamp with time zone,
+    source text,
+    status text DEFAULT 'pending'::text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.retarget_customers_id_seq"
+pg_restore: from TOC entry 297; 1259 24576 SEQUENCE retarget_customers_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "retarget_customers_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.retarget_customers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.retarget_customers_id_seq"
+pg_restore: creating TABLE "coexistence.retarget_sheet_settings"
+pg_restore: from TOC entry 300; 1259 24592 TABLE retarget_sheet_settings postgres
+pg_restore: error: could not execute query: ERROR:  relation "retarget_sheet_settings" already exists
+Command was: CREATE TABLE coexistence.retarget_sheet_settings (
+    id bigint NOT NULL,
+    sheet_url text NOT NULL,
+    sheet_name text,
+    is_active boolean DEFAULT true NOT NULL,
+    last_synced_row integer DEFAULT 0 NOT NULL,
+    last_synced_at timestamp with time zone,
+    last_error_at timestamp with time zone,
+    last_error_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.retarget_sheet_settings_id_seq"
+pg_restore: from TOC entry 299; 1259 24591 SEQUENCE retarget_sheet_settings_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "retarget_sheet_settings_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.retarget_sheet_settings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.retarget_sheet_settings_id_seq"
+pg_restore: creating TABLE "coexistence.retarget_sync_log"
+pg_restore: from TOC entry 302; 1259 24605 TABLE retarget_sync_log postgres
+pg_restore: error: could not execute query: ERROR:  relation "retarget_sync_log" already exists
+Command was: CREATE TABLE coexistence.retarget_sync_log (
+    id bigint NOT NULL,
+    source text NOT NULL,
+    triggered_by text,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    duration_ms integer,
+    rows_total integer DEFAULT 0 NOT NULL,
+    rows_imported integer DEFAULT 0 NOT NULL,
+    rows_updated integer DEFAULT 0 NOT NULL,
+    rows_skipped integer DEFAULT 0 NOT NULL,
+    rows_errored integer DEFAULT 0 NOT NULL,
+    errors jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status text DEFAULT 'running'::text NOT NULL,
+    error_message text
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.retarget_sync_log_id_seq"
+pg_restore: from TOC entry 301; 1259 24604 SEQUENCE retarget_sync_log_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "retarget_sync_log_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.retarget_sync_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.retarget_sync_log_id_seq"
+pg_restore: creating TABLE "coexistence.shown_products"
+pg_restore: from TOC entry 320; 1259 82457 TABLE shown_products postgres
+pg_restore: error: could not execute query: ERROR:  relation "shown_products" already exists
+Command was: CREATE TABLE coexistence.shown_products (
+    id bigint NOT NULL,
+    customer_id text NOT NULL,
+    sku text NOT NULL,
+    shown_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.shown_products_id_seq"
+pg_restore: from TOC entry 321; 1259 82463 SEQUENCE shown_products_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "shown_products_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.shown_products_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.shown_products_id_seq"
+pg_restore: creating TABLE "coexistence.tags"
+pg_restore: from TOC entry 255; 1259 16619 TABLE tags postgres
+pg_restore: error: could not execute query: ERROR:  relation "tags" already exists
+Command was: CREATE TABLE coexistence.tags (
+    id text NOT NULL,
+    name text NOT NULL,
+    color text DEFAULT '#dc2626'::text,
+    category_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating TABLE "coexistence.team_members"
+pg_restore: from TOC entry 256; 1259 16627 TABLE team_members postgres
+pg_restore: error: could not execute query: ERROR:  relation "team_members" already exists
+Command was: CREATE TABLE coexistence.team_members (
+    id text NOT NULL,
+    name text NOT NULL,
+    phone_number text,
+    bda_id text,
+    address text,
+    email text,
+    profile_picture_url text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+pg_restore: creating TABLE "coexistence.user_audit_log"
+pg_restore: from TOC entry 257; 1259 16634 TABLE user_audit_log postgres
+pg_restore: error: could not execute query: ERROR:  relation "user_audit_log" already exists
+Command was: CREATE TABLE coexistence.user_audit_log (
+    id bigint NOT NULL,
+    actor_user_id bigint,
+    actor_username text,
+    action text NOT NULL,
+    target_type text,
+    target_id text,
+    payload jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.user_audit_log_id_seq"
+pg_restore: from TOC entry 258; 1259 16640 SEQUENCE user_audit_log_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "user_audit_log_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.user_audit_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.user_audit_log_id_seq"
+pg_restore: creating TABLE "coexistence.user_wa_assignments"
+pg_restore: from TOC entry 259; 1259 16641 TABLE user_wa_assignments postgres
+pg_restore: error: could not execute query: ERROR:  relation "user_wa_assignments" already exists
+Command was: CREATE TABLE coexistence.user_wa_assignments (
+    id bigint NOT NULL,
+    user_id bigint NOT NULL,
+    wa_number text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by bigint
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.user_wa_assignments_id_seq"
+pg_restore: from TOC entry 260; 1259 16647 SEQUENCE user_wa_assignments_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "user_wa_assignments_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.user_wa_assignments_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.user_wa_assignments_id_seq"
+pg_restore: creating TABLE "coexistence.wa_links"
+pg_restore: from TOC entry 261; 1259 16648 TABLE wa_links postgres
+pg_restore: error: could not execute query: ERROR:  relation "wa_links" already exists
+Command was: CREATE TABLE coexistence.wa_links (
+    id bigint NOT NULL,
+    name text NOT NULL,
+    message text,
+    phone_number text NOT NULL,
+    slug text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.wa_links_id_seq"
+pg_restore: from TOC entry 262; 1259 16655 SEQUENCE wa_links_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "wa_links_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.wa_links_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.wa_links_id_seq"
+pg_restore: creating TABLE "coexistence.webhook_events"
+pg_restore: from TOC entry 263; 1259 16656 TABLE webhook_events postgres
+pg_restore: error: could not execute query: ERROR:  relation "webhook_events" already exists
+Command was: CREATE TABLE coexistence.webhook_events (
+    id bigint NOT NULL,
+    received_at timestamp with time zone DEFAULT now() NOT NULL,
+    source text,
+    remote_ip text,
+    request_headers jsonb,
+    payload jsonb NOT NULL,
+    payload_kind text,
+    records_extracted integer DEFAULT 0 NOT NULL,
+    processing_status text DEFAULT 'received'::text NOT NULL,
+    processing_error text,
+    processing_ms integer,
+    meta_object text,
+    phone_number_id text,
+    payload_subtype text,
+    CONSTRAINT webhook_events_processing_status_check CHECK ((processing_status = ANY (ARRAY['received'::text, 'processed'::text, 'partial'::text, 'error'::text, 'verified'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.webhook_events_id_seq"
+pg_restore: from TOC entry 264; 1259 16665 SEQUENCE webhook_events_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "webhook_events_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.webhook_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.webhook_events_id_seq"
+pg_restore: creating TABLE "coexistence.whatsapp_accounts"
+pg_restore: from TOC entry 265; 1259 16666 TABLE whatsapp_accounts postgres
+pg_restore: error: could not execute query: ERROR:  relation "whatsapp_accounts" already exists
+Command was: CREATE TABLE coexistence.whatsapp_accounts (
+    id bigint NOT NULL,
+    display_name text NOT NULL,
+    display_phone_number text NOT NULL,
+    phone_number_id text NOT NULL,
+    waba_id text NOT NULL,
+    access_token_encrypted text NOT NULL,
+    is_default boolean DEFAULT false NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    health_status text DEFAULT 'unknown'::text NOT NULL,
+    last_error_at timestamp with time zone,
+    last_error_message text,
+    last_success_at timestamp with time zone,
+    meta_app_id text,
+    verify_token_encrypted text,
+    CONSTRAINT whatsapp_accounts_health_status_check CHECK ((health_status = ANY (ARRAY['unknown'::text, 'healthy'::text, 'invalid_token'::text, 'rate_limited'::text, 'unknown_error'::text])))
+);
+
+
+pg_restore: creating SEQUENCE "coexistence.whatsapp_accounts_id_seq"
+pg_restore: from TOC entry 266; 1259 16677 SEQUENCE whatsapp_accounts_id_seq postgres
+pg_restore: error: could not execute query: ERROR:  relation "whatsapp_accounts_id_seq" already exists
+Command was: CREATE SEQUENCE coexistence.whatsapp_accounts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+pg_restore: creating SEQUENCE OWNED BY "coexistence.whatsapp_accounts_id_seq"
+pg_restore: creating DEFAULT "coexistence.ai_models id"
+pg_restore: creating DEFAULT "coexistence.akchat_users id"
+pg_restore: creating DEFAULT "coexistence.automation_execution_steps id"
+pg_restore: creating DEFAULT "coexistence.automation_executions id"
+pg_restore: creating DEFAULT "coexistence.broadcast_logs id"
+pg_restore: creating DEFAULT "coexistence.broadcasts id"
+pg_restore: creating DEFAULT "coexistence.chat_history id"
+pg_restore: creating DEFAULT "coexistence.chatbots id"
+pg_restore: creating DEFAULT "coexistence.contacts id"
+pg_restore: creating DEFAULT "coexistence.conversation_messages id"
+pg_restore: creating DEFAULT "coexistence.customer_intent_history id"
+pg_restore: creating DEFAULT "coexistence.customer_intent_profiles id"
+pg_restore: creating DEFAULT "coexistence.customer_interests id"
+pg_restore: creating DEFAULT "coexistence.deals id"
+pg_restore: creating DEFAULT "coexistence.email_campaigns id"
+pg_restore: creating DEFAULT "coexistence.email_inbox_messages id"
+pg_restore: creating DEFAULT "coexistence.email_senders id"
+pg_restore: creating DEFAULT "coexistence.email_sheet_sources id"
+pg_restore: creating DEFAULT "coexistence.email_subscribers id"
+pg_restore: creating DEFAULT "coexistence.email_templates id"
+pg_restore: creating DEFAULT "coexistence.instagram_accounts id"
+pg_restore: creating DEFAULT "coexistence.instagram_ai_logs id"
+pg_restore: creating DEFAULT "coexistence.instagram_analytics id"
+pg_restore: creating DEFAULT "coexistence.instagram_campaign_messages id"
+pg_restore: creating DEFAULT "coexistence.instagram_campaigns id"
+pg_restore: creating DEFAULT "coexistence.instagram_contacts id"
+pg_restore: creating DEFAULT "coexistence.instagram_conversations id"
+pg_restore: creating DEFAULT "coexistence.instagram_messages id"
+pg_restore: creating DEFAULT "coexistence.instagram_notes id"
+pg_restore: creating DEFAULT "coexistence.instagram_settings id"
+pg_restore: creating DEFAULT "coexistence.instagram_tags id"
+pg_restore: creating DEFAULT "coexistence.instagram_templates id"
+pg_restore: creating DEFAULT "coexistence.instagram_workflow_execution_steps id"
+pg_restore: creating DEFAULT "coexistence.instagram_workflow_executions id"
+pg_restore: creating DEFAULT "coexistence.instagram_workflows id"
+pg_restore: creating DEFAULT "coexistence.knowledge_chunks id"
+pg_restore: creating DEFAULT "coexistence.knowledge_documents id"
+pg_restore: creating DEFAULT "coexistence.media_library id"
+pg_restore: creating DEFAULT "coexistence.media_meta_sync id"
+pg_restore: creating DEFAULT "coexistence.message_reactions id"
+pg_restore: creating DEFAULT "coexistence.message_template_revisions id"
+pg_restore: creating DEFAULT "coexistence.message_templates id"
+pg_restore: creating DEFAULT "coexistence.pipeline_stages id"
+pg_restore: creating DEFAULT "coexistence.pipelines id"
+pg_restore: creating DEFAULT "coexistence.retarget_customers id"
+pg_restore: creating DEFAULT "coexistence.retarget_sheet_settings id"
+pg_restore: creating DEFAULT "coexistence.retarget_sync_log id"
+pg_restore: creating DEFAULT "coexistence.shown_products id"
+pg_restore: creating DEFAULT "coexistence.user_audit_log id"
+pg_restore: creating DEFAULT "coexistence.user_wa_assignments id"
+pg_restore: creating DEFAULT "coexistence.wa_links id"
+pg_restore: creating DEFAULT "coexistence.webhook_events id"
+pg_restore: creating DEFAULT "coexistence.whatsapp_accounts id"
+pg_restore: processing data for table "coexistence.ai_models"
+pg_restore: processing data for table "coexistence.akchat_users"
+pg_restore: from TOC entry 4506; 0 16513 TABLE DATA akchat_users postgres
+pg_restore: error: COPY failed for table "akchat_users": ERROR:  duplicate key value violates unique constraint "akchat_users_email_key"
+DETAIL:  Key (email)=(invi0905@gmail.com) already exists.
+CONTEXT:  COPY akchat_users, line 1
+pg_restore: processing data for table "coexistence.automation_execution_steps"
+pg_restore: processing data for table "coexistence.automation_executions"
+pg_restore: processing data for table "coexistence.broadcast_logs"
+pg_restore: processing data for table "coexistence.broadcasts"
+pg_restore: processing data for table "coexistence.categories"
+pg_restore: processing data for table "coexistence.chat_history"
+pg_restore: processing data for table "coexistence.chatbots"
+pg_restore: from TOC entry 4498; 0 16463 TABLE DATA chatbots postgres
+pg_restore: error: COPY failed for table "chatbots": ERROR:  duplicate key value violates unique constraint "chatbots_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY chatbots, line 1
+pg_restore: processing data for table "coexistence.contact_field_definitions"
+pg_restore: processing data for table "coexistence.contacts"
+pg_restore: processing data for table "coexistence.conversation_messages"
+pg_restore: from TOC entry 4591; 0 82468 TABLE DATA conversation_messages postgres
+pg_restore: error: COPY failed for table "conversation_messages": ERROR:  duplicate key value violates unique constraint "conversation_messages_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY conversation_messages, line 1
+pg_restore: processing data for table "coexistence.conversation_reads"
+pg_restore: processing data for table "coexistence.customer_intent_history"
+pg_restore: processing data for table "coexistence.customer_intent_profiles"
+pg_restore: processing data for table "coexistence.customer_interests"
+pg_restore: from TOC entry 4593; 0 82482 TABLE DATA customer_interests postgres
+pg_restore: error: COPY failed for table "customer_interests": ERROR:  duplicate key value violates unique constraint "customer_interests_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY customer_interests, line 1
+pg_restore: processing data for table "coexistence.deals"
+pg_restore: processing data for table "coexistence.email_campaigns"
+pg_restore: from TOC entry 4577; 0 24652 TABLE DATA email_campaigns postgres
+pg_restore: error: COPY failed for table "email_campaigns": ERROR:  duplicate key value violates unique constraint "email_campaigns_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY email_campaigns, line 1
+pg_restore: processing data for table "coexistence.email_inbox_messages"
+pg_restore: from TOC entry 4581; 0 40992 TABLE DATA email_inbox_messages postgres
+pg_restore: error: COPY failed for table "email_inbox_messages": ERROR:  duplicate key value violates unique constraint "email_inbox_messages_pkey"
+DETAIL:  Key (id)=(265) already exists.
+CONTEXT:  COPY email_inbox_messages, line 1
+pg_restore: processing data for table "coexistence.email_inbox_poll_state"
+pg_restore: from TOC entry 4582; 0 41137 TABLE DATA email_inbox_poll_state postgres
+pg_restore: error: COPY failed for table "email_inbox_poll_state": ERROR:  duplicate key value violates unique constraint "email_inbox_poll_state_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY email_inbox_poll_state, line 1
+pg_restore: processing data for table "coexistence.email_senders"
+pg_restore: processing data for table "coexistence.email_sheet_sources"
+pg_restore: from TOC entry 4579; 0 32769 TABLE DATA email_sheet_sources postgres
+pg_restore: error: COPY failed for table "email_sheet_sources": ERROR:  duplicate key value violates unique constraint "email_sheet_sources_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY email_sheet_sources, line 1
+pg_restore: processing data for table "coexistence.email_subscribers"
+pg_restore: from TOC entry 4573; 0 24623 TABLE DATA email_subscribers postgres
+pg_restore: error: COPY failed for table "email_subscribers": ERROR:  duplicate key value violates unique constraint "email_subscribers_email_key"
+DETAIL:  Key (email)=(adhiv367@gmail.com) already exists.
+CONTEXT:  COPY email_subscribers, line 1
+pg_restore: processing data for table "coexistence.email_templates"
+pg_restore: from TOC entry 4575; 0 24641 TABLE DATA email_templates postgres
+pg_restore: error: COPY failed for table "email_templates": ERROR:  duplicate key value violates unique constraint "email_templates_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY email_templates, line 1
+pg_restore: processing data for table "coexistence.instagram_accounts"
+pg_restore: processing data for table "coexistence.instagram_ai_logs"
+pg_restore: processing data for table "coexistence.instagram_analytics"
+pg_restore: processing data for table "coexistence.instagram_campaign_messages"
+pg_restore: processing data for table "coexistence.instagram_campaigns"
+pg_restore: processing data for table "coexistence.instagram_contacts"
+pg_restore: processing data for table "coexistence.instagram_conversations"
+pg_restore: processing data for table "coexistence.instagram_messages"
+pg_restore: processing data for table "coexistence.instagram_notes"
+pg_restore: processing data for table "coexistence.instagram_settings"
+pg_restore: processing data for table "coexistence.instagram_tags"
+pg_restore: processing data for table "coexistence.instagram_templates"
+pg_restore: processing data for table "coexistence.instagram_workflow_execution_steps"
+pg_restore: processing data for table "coexistence.instagram_workflow_executions"
+pg_restore: processing data for table "coexistence.instagram_workflows"
+pg_restore: processing data for table "coexistence.knowledge_chunks"
+pg_restore: from TOC entry 4587; 0 82437 TABLE DATA knowledge_chunks postgres
+pg_restore: error: COPY failed for table "knowledge_chunks": ERROR:  duplicate key value violates unique constraint "knowledge_chunks_pkey"
+DETAIL:  Key (id)=(5) already exists.
+CONTEXT:  COPY knowledge_chunks, line 1
+pg_restore: processing data for table "coexistence.knowledge_documents"
+pg_restore: from TOC entry 4585; 0 82423 TABLE DATA knowledge_documents postgres
+pg_restore: error: COPY failed for table "knowledge_documents": ERROR:  duplicate key value violates unique constraint "knowledge_documents_pkey"
+DETAIL:  Key (id)=(10) already exists.
+CONTEXT:  COPY knowledge_documents, line 1
+pg_restore: processing data for table "coexistence.media_library"
+pg_restore: processing data for table "coexistence.media_meta_sync"
+pg_restore: processing data for table "coexistence.media_objects"
+pg_restore: processing data for table "coexistence.message_reactions"
+pg_restore: processing data for table "coexistence.message_template_analytics_daily"
+pg_restore: processing data for table "coexistence.message_template_revisions"
+pg_restore: processing data for table "coexistence.message_templates"
+pg_restore: processing data for table "coexistence.pipeline_stages"
+pg_restore: processing data for table "coexistence.pipelines"
+pg_restore: processing data for table "coexistence.retarget_customers"
+pg_restore: processing data for table "coexistence.retarget_sheet_settings"
+pg_restore: processing data for table "coexistence.retarget_sync_log"
+pg_restore: processing data for table "coexistence.shown_products"
+pg_restore: from TOC entry 4589; 0 82457 TABLE DATA shown_products postgres
+pg_restore: error: COPY failed for table "shown_products": ERROR:  duplicate key value violates unique constraint "shown_products_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY shown_products, line 1
+pg_restore: processing data for table "coexistence.tags"
+pg_restore: processing data for table "coexistence.team_members"
+pg_restore: processing data for table "coexistence.user_audit_log"
+pg_restore: processing data for table "coexistence.user_wa_assignments"
+pg_restore: processing data for table "coexistence.wa_links"
+pg_restore: processing data for table "coexistence.webhook_events"
+pg_restore: processing data for table "coexistence.whatsapp_accounts"
+pg_restore: from TOC entry 4534; 0 16666 TABLE DATA whatsapp_accounts postgres
+pg_restore: error: COPY failed for table "whatsapp_accounts": ERROR:  duplicate key value violates unique constraint "whatsapp_accounts_phone_number_id_key"
+DETAIL:  Key (phone_number_id)=(test-phone-id-local) already exists.
+CONTEXT:  COPY whatsapp_accounts, line 1
+pg_restore: executing SEQUENCE SET ai_models_id_seq
+pg_restore: executing SEQUENCE SET akchat_users_id_seq
+pg_restore: executing SEQUENCE SET automation_execution_steps_id_seq
+pg_restore: executing SEQUENCE SET automation_executions_id_seq
+pg_restore: executing SEQUENCE SET broadcast_logs_id_seq
+pg_restore: executing SEQUENCE SET broadcasts_id_seq
+pg_restore: executing SEQUENCE SET chat_history_id_seq
+pg_restore: executing SEQUENCE SET chatbots_id_seq
+pg_restore: executing SEQUENCE SET contacts_id_seq
+pg_restore: executing SEQUENCE SET conversation_messages_id_seq
+pg_restore: executing SEQUENCE SET customer_intent_history_id_seq
+pg_restore: executing SEQUENCE SET customer_intent_profiles_id_seq
+pg_restore: executing SEQUENCE SET customer_interests_id_seq
+pg_restore: executing SEQUENCE SET deals_id_seq
+pg_restore: executing SEQUENCE SET email_campaigns_id_seq
+pg_restore: executing SEQUENCE SET email_inbox_messages_id_seq
+pg_restore: executing SEQUENCE SET email_senders_id_seq
+pg_restore: executing SEQUENCE SET email_sheet_sources_id_seq
+pg_restore: executing SEQUENCE SET email_subscribers_id_seq
+pg_restore: executing SEQUENCE SET email_templates_id_seq
+pg_restore: executing SEQUENCE SET instagram_accounts_id_seq
+pg_restore: executing SEQUENCE SET instagram_ai_logs_id_seq
+pg_restore: executing SEQUENCE SET instagram_analytics_id_seq
+pg_restore: executing SEQUENCE SET instagram_campaign_messages_id_seq
+pg_restore: executing SEQUENCE SET instagram_campaigns_id_seq
+pg_restore: executing SEQUENCE SET instagram_contacts_id_seq
+pg_restore: executing SEQUENCE SET instagram_conversations_id_seq
+pg_restore: executing SEQUENCE SET instagram_messages_id_seq
+pg_restore: executing SEQUENCE SET instagram_notes_id_seq
+pg_restore: executing SEQUENCE SET instagram_settings_id_seq
+pg_restore: executing SEQUENCE SET instagram_tags_id_seq
+pg_restore: executing SEQUENCE SET instagram_templates_id_seq
+pg_restore: executing SEQUENCE SET instagram_workflow_execution_steps_id_seq
+pg_restore: executing SEQUENCE SET instagram_workflow_executions_id_seq
+pg_restore: executing SEQUENCE SET instagram_workflows_id_seq
+pg_restore: executing SEQUENCE SET knowledge_chunks_id_seq
+pg_restore: executing SEQUENCE SET knowledge_documents_id_seq
+pg_restore: executing SEQUENCE SET media_library_id_seq
+pg_restore: executing SEQUENCE SET media_meta_sync_id_seq
+pg_restore: executing SEQUENCE SET message_reactions_id_seq
+pg_restore: executing SEQUENCE SET message_template_revisions_id_seq
+pg_restore: executing SEQUENCE SET message_templates_id_seq
+pg_restore: executing SEQUENCE SET pipeline_stages_id_seq
+pg_restore: executing SEQUENCE SET pipelines_id_seq
+pg_restore: executing SEQUENCE SET retarget_customers_id_seq
+pg_restore: executing SEQUENCE SET retarget_sheet_settings_id_seq
+pg_restore: executing SEQUENCE SET retarget_sync_log_id_seq
+pg_restore: executing SEQUENCE SET shown_products_id_seq
+pg_restore: executing SEQUENCE SET user_audit_log_id_seq
+pg_restore: executing SEQUENCE SET user_wa_assignments_id_seq
+pg_restore: executing SEQUENCE SET wa_links_id_seq
+pg_restore: executing SEQUENCE SET webhook_events_id_seq
+pg_restore: executing SEQUENCE SET whatsapp_accounts_id_seq
+pg_restore: creating CONSTRAINT "coexistence.ai_models ai_models_pkey"
+pg_restore: from TOC entry 4064; 2606 16701 CONSTRAINT ai_models ai_models_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "ai_models" are not allowed
+Command was: ALTER TABLE ONLY coexistence.ai_models
+    ADD CONSTRAINT ai_models_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.akchat_users akchat_users_email_key"
+pg_restore: from TOC entry 4128; 2606 16729 CONSTRAINT akchat_users akchat_users_email_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "akchat_users_email_key" already exists
+Command was: ALTER TABLE ONLY coexistence.akchat_users
+    ADD CONSTRAINT akchat_users_email_key UNIQUE (email);
+
+
+pg_restore: creating CONSTRAINT "coexistence.akchat_users akchat_users_pkey"
+pg_restore: from TOC entry 4130; 2606 16731 CONSTRAINT akchat_users akchat_users_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "akchat_users" are not allowed
+Command was: ALTER TABLE ONLY coexistence.akchat_users
+    ADD CONSTRAINT akchat_users_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.akchat_users akchat_users_username_key"
+pg_restore: from TOC entry 4132; 2606 16733 CONSTRAINT akchat_users akchat_users_username_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "akchat_users_username_key" already exists
+Command was: ALTER TABLE ONLY coexistence.akchat_users
+    ADD CONSTRAINT akchat_users_username_key UNIQUE (username);
+
+
+pg_restore: creating CONSTRAINT "coexistence.automation_execution_steps automation_execution_steps_pkey"
+pg_restore: from TOC entry 4067; 2606 16703 CONSTRAINT automation_execution_steps automation_execution_steps_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "automation_execution_steps" are not allowed
+Command was: ALTER TABLE ONLY coexistence.automation_execution_steps
+    ADD CONSTRAINT automation_execution_steps_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.automation_executions automation_executions_pkey"
+pg_restore: from TOC entry 4074; 2606 16705 CONSTRAINT automation_executions automation_executions_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "automation_executions" are not allowed
+Command was: ALTER TABLE ONLY coexistence.automation_executions
+    ADD CONSTRAINT automation_executions_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.broadcast_logs broadcast_logs_pkey"
+pg_restore: from TOC entry 4080; 2606 16707 CONSTRAINT broadcast_logs broadcast_logs_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "broadcast_logs" are not allowed
+Command was: ALTER TABLE ONLY coexistence.broadcast_logs
+    ADD CONSTRAINT broadcast_logs_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.broadcasts broadcasts_pkey"
+pg_restore: from TOC entry 4085; 2606 16709 CONSTRAINT broadcasts broadcasts_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "broadcasts" are not allowed
+Command was: ALTER TABLE ONLY coexistence.broadcasts
+    ADD CONSTRAINT broadcasts_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.categories categories_pkey"
+pg_restore: from TOC entry 4090; 2606 16711 CONSTRAINT categories categories_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "categories" are not allowed
+Command was: ALTER TABLE ONLY coexistence.categories
+    ADD CONSTRAINT categories_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.chat_history chat_history_message_id_key"
+pg_restore: from TOC entry 4092; 2606 16713 CONSTRAINT chat_history chat_history_message_id_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "chat_history_message_id_key" already exists
+Command was: ALTER TABLE ONLY coexistence.chat_history
+    ADD CONSTRAINT chat_history_message_id_key UNIQUE (message_id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.chat_history chat_history_pkey"
+pg_restore: from TOC entry 4094; 2606 16715 CONSTRAINT chat_history chat_history_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "chat_history" are not allowed
+Command was: ALTER TABLE ONLY coexistence.chat_history
+    ADD CONSTRAINT chat_history_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.chatbots chatbots_pkey"
+pg_restore: from TOC entry 4104; 2606 16717 CONSTRAINT chatbots chatbots_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "chatbots" are not allowed
+Command was: ALTER TABLE ONLY coexistence.chatbots
+    ADD CONSTRAINT chatbots_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.contact_field_definitions contact_field_definitions_pkey"
+pg_restore: from TOC entry 4107; 2606 16719 CONSTRAINT contact_field_definitions contact_field_definitions_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "contact_field_definitions" are not allowed
+Command was: ALTER TABLE ONLY coexistence.contact_field_definitions
+    ADD CONSTRAINT contact_field_definitions_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.contacts contacts_pkey"
+pg_restore: from TOC entry 4110; 2606 16721 CONSTRAINT contacts contacts_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "contacts" are not allowed
+Command was: ALTER TABLE ONLY coexistence.contacts
+    ADD CONSTRAINT contacts_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.contacts contacts_wa_number_contact_number_key"
+pg_restore: from TOC entry 4112; 2606 16723 CONSTRAINT contacts contacts_wa_number_contact_number_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "contacts_wa_number_contact_number_key" already exists
+Command was: ALTER TABLE ONLY coexistence.contacts
+    ADD CONSTRAINT contacts_wa_number_contact_number_key UNIQUE (wa_number, contact_number);
+
+
+pg_restore: creating CONSTRAINT "coexistence.conversation_messages conversation_messages_pkey"
+pg_restore: from TOC entry 4287; 2606 82478 CONSTRAINT conversation_messages conversation_messages_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "conversation_messages" are not allowed
+Command was: ALTER TABLE ONLY coexistence.conversation_messages
+    ADD CONSTRAINT conversation_messages_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.conversation_reads conversation_reads_pkey"
+pg_restore: from TOC entry 4118; 2606 16725 CONSTRAINT conversation_reads conversation_reads_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "conversation_reads" are not allowed
+Command was: ALTER TABLE ONLY coexistence.conversation_reads
+    ADD CONSTRAINT conversation_reads_pkey PRIMARY KEY (wa_number, contact_number);
+
+
+pg_restore: creating CONSTRAINT "coexistence.customer_intent_history customer_intent_history_pkey"
+pg_restore: from TOC entry 4301; 2606 123471 CONSTRAINT customer_intent_history customer_intent_history_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "customer_intent_history" are not allowed
+Command was: ALTER TABLE ONLY coexistence.customer_intent_history
+    ADD CONSTRAINT customer_intent_history_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.customer_intent_profiles customer_intent_profiles_pkey"
+pg_restore: from TOC entry 4295; 2606 123456 CONSTRAINT customer_intent_profiles customer_intent_profiles_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "customer_intent_profiles" are not allowed
+Command was: ALTER TABLE ONLY coexistence.customer_intent_profiles
+    ADD CONSTRAINT customer_intent_profiles_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.customer_intent_profiles customer_intent_profiles_workspace_id_wa_number_contact_num_key"
+pg_restore: from TOC entry 4297; 2606 123458 CONSTRAINT customer_intent_profiles customer_intent_profiles_workspace_id_wa_number_contact_num_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "customer_intent_profiles_workspace_id_wa_number_contact_num_key" already exists
+Command was: ALTER TABLE ONLY coexistence.customer_intent_profiles
+    ADD CONSTRAINT customer_intent_profiles_workspace_id_wa_number_contact_num_key UNIQUE (workspace_id, wa_number, contact_number);
+
+
+pg_restore: creating CONSTRAINT "coexistence.customer_interests customer_interests_pkey"
+pg_restore: from TOC entry 4290; 2606 82494 CONSTRAINT customer_interests customer_interests_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "customer_interests" are not allowed
+Command was: ALTER TABLE ONLY coexistence.customer_interests
+    ADD CONSTRAINT customer_interests_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.deals deals_pkey"
+pg_restore: from TOC entry 4120; 2606 16727 CONSTRAINT deals deals_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "deals" are not allowed
+Command was: ALTER TABLE ONLY coexistence.deals
+    ADD CONSTRAINT deals_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.email_campaigns email_campaigns_pkey"
+pg_restore: from TOC entry 4260; 2606 24664 CONSTRAINT email_campaigns email_campaigns_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "email_campaigns" are not allowed
+Command was: ALTER TABLE ONLY coexistence.email_campaigns
+    ADD CONSTRAINT email_campaigns_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.email_inbox_messages email_inbox_messages_pkey"
+pg_restore: from TOC entry 4265; 2606 41002 CONSTRAINT email_inbox_messages email_inbox_messages_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "email_inbox_messages" are not allowed
+Command was: ALTER TABLE ONLY coexistence.email_inbox_messages
+    ADD CONSTRAINT email_inbox_messages_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.email_inbox_poll_state email_inbox_poll_state_pkey"
+pg_restore: from TOC entry 4270; 2606 41143 CONSTRAINT email_inbox_poll_state email_inbox_poll_state_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "email_inbox_poll_state" are not allowed
+Command was: ALTER TABLE ONLY coexistence.email_inbox_poll_state
+    ADD CONSTRAINT email_inbox_poll_state_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.email_senders email_senders_email_key"
+pg_restore: from TOC entry 4272; 2606 49339 CONSTRAINT email_senders email_senders_email_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_senders_email_key" already exists
+Command was: ALTER TABLE ONLY coexistence.email_senders
+    ADD CONSTRAINT email_senders_email_key UNIQUE (email);
+
+
+pg_restore: creating CONSTRAINT "coexistence.email_senders email_senders_pkey"
+pg_restore: from TOC entry 4274; 2606 49337 CONSTRAINT email_senders email_senders_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "email_senders" are not allowed
+Command was: ALTER TABLE ONLY coexistence.email_senders
+    ADD CONSTRAINT email_senders_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.email_sheet_sources email_sheet_sources_pkey"
+pg_restore: from TOC entry 4263; 2606 32778 CONSTRAINT email_sheet_sources email_sheet_sources_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "email_sheet_sources" are not allowed
+Command was: ALTER TABLE ONLY coexistence.email_sheet_sources
+    ADD CONSTRAINT email_sheet_sources_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.email_subscribers email_subscribers_email_key"
+pg_restore: from TOC entry 4252; 2606 24637 CONSTRAINT email_subscribers email_subscribers_email_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "email_subscribers_email_key" already exists
+Command was: ALTER TABLE ONLY coexistence.email_subscribers
+    ADD CONSTRAINT email_subscribers_email_key UNIQUE (email);
+
+
+pg_restore: creating CONSTRAINT "coexistence.email_subscribers email_subscribers_pkey"
+pg_restore: from TOC entry 4254; 2606 24635 CONSTRAINT email_subscribers email_subscribers_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "email_subscribers" are not allowed
+Command was: ALTER TABLE ONLY coexistence.email_subscribers
+    ADD CONSTRAINT email_subscribers_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.email_templates email_templates_pkey"
+pg_restore: from TOC entry 4258; 2606 24650 CONSTRAINT email_templates email_templates_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "email_templates" are not allowed
+Command was: ALTER TABLE ONLY coexistence.email_templates
+    ADD CONSTRAINT email_templates_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_accounts instagram_accounts_instagram_business_id_key"
+pg_restore: from TOC entry 4210; 2606 17193 CONSTRAINT instagram_accounts instagram_accounts_instagram_business_id_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "instagram_accounts_instagram_business_id_key" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_accounts
+    ADD CONSTRAINT instagram_accounts_instagram_business_id_key UNIQUE (instagram_business_id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_accounts instagram_accounts_pkey"
+pg_restore: from TOC entry 4212; 2606 16990 CONSTRAINT instagram_accounts instagram_accounts_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_accounts" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_accounts
+    ADD CONSTRAINT instagram_accounts_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_ai_logs instagram_ai_logs_pkey"
+pg_restore: from TOC entry 4238; 2606 17174 CONSTRAINT instagram_ai_logs instagram_ai_logs_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_ai_logs" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_ai_logs
+    ADD CONSTRAINT instagram_ai_logs_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_analytics instagram_analytics_pkey"
+pg_restore: from TOC entry 4240; 2606 17190 CONSTRAINT instagram_analytics instagram_analytics_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_analytics" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_analytics
+    ADD CONSTRAINT instagram_analytics_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_campaign_messages instagram_campaign_messages_pkey"
+pg_restore: from TOC entry 4224; 2606 17068 CONSTRAINT instagram_campaign_messages instagram_campaign_messages_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_campaign_messages" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_campaign_messages
+    ADD CONSTRAINT instagram_campaign_messages_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_campaigns instagram_campaigns_pkey"
+pg_restore: from TOC entry 4222; 2606 17057 CONSTRAINT instagram_campaigns instagram_campaigns_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_campaigns" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_campaigns
+    ADD CONSTRAINT instagram_campaigns_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_contacts instagram_contacts_pkey"
+pg_restore: from TOC entry 4214; 2606 17001 CONSTRAINT instagram_contacts instagram_contacts_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_contacts" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_contacts
+    ADD CONSTRAINT instagram_contacts_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_conversations instagram_conversations_pkey"
+pg_restore: from TOC entry 4216; 2606 17013 CONSTRAINT instagram_conversations instagram_conversations_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_conversations" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_conversations
+    ADD CONSTRAINT instagram_conversations_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_messages instagram_messages_pkey"
+pg_restore: from TOC entry 4218; 2606 17029 CONSTRAINT instagram_messages instagram_messages_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_messages" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_messages
+    ADD CONSTRAINT instagram_messages_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_notes instagram_notes_pkey"
+pg_restore: from TOC entry 4234; 2606 17149 CONSTRAINT instagram_notes instagram_notes_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_notes" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_notes
+    ADD CONSTRAINT instagram_notes_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_settings instagram_settings_pkey"
+pg_restore: from TOC entry 4236; 2606 17164 CONSTRAINT instagram_settings instagram_settings_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_settings" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_settings
+    ADD CONSTRAINT instagram_settings_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_tags instagram_tags_pkey"
+pg_restore: from TOC entry 4232; 2606 17134 CONSTRAINT instagram_tags instagram_tags_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_tags" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_tags
+    ADD CONSTRAINT instagram_tags_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_templates instagram_templates_pkey"
+pg_restore: from TOC entry 4220; 2606 17045 CONSTRAINT instagram_templates instagram_templates_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_templates" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_templates
+    ADD CONSTRAINT instagram_templates_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_workflow_execution_steps instagram_workflow_execution_steps_pkey"
+pg_restore: from TOC entry 4230; 2606 17120 CONSTRAINT instagram_workflow_execution_steps instagram_workflow_execution_steps_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_workflow_execution_steps" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_workflow_execution_steps
+    ADD CONSTRAINT instagram_workflow_execution_steps_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_workflow_executions instagram_workflow_executions_pkey"
+pg_restore: from TOC entry 4228; 2606 17103 CONSTRAINT instagram_workflow_executions instagram_workflow_executions_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_workflow_executions" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_workflow_executions
+    ADD CONSTRAINT instagram_workflow_executions_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.instagram_workflows instagram_workflows_pkey"
+pg_restore: from TOC entry 4226; 2606 17092 CONSTRAINT instagram_workflows instagram_workflows_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "instagram_workflows" are not allowed
+Command was: ALTER TABLE ONLY coexistence.instagram_workflows
+    ADD CONSTRAINT instagram_workflows_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.knowledge_chunks knowledge_chunks_pkey"
+pg_restore: from TOC entry 4282; 2606 82446 CONSTRAINT knowledge_chunks knowledge_chunks_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "knowledge_chunks" are not allowed
+Command was: ALTER TABLE ONLY coexistence.knowledge_chunks
+    ADD CONSTRAINT knowledge_chunks_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.knowledge_documents knowledge_documents_pkey"
+pg_restore: from TOC entry 4277; 2606 82435 CONSTRAINT knowledge_documents knowledge_documents_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "knowledge_documents" are not allowed
+Command was: ALTER TABLE ONLY coexistence.knowledge_documents
+    ADD CONSTRAINT knowledge_documents_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.media_library media_library_pkey"
+pg_restore: from TOC entry 4137; 2606 16735 CONSTRAINT media_library media_library_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "media_library" are not allowed
+Command was: ALTER TABLE ONLY coexistence.media_library
+    ADD CONSTRAINT media_library_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.media_meta_sync media_meta_sync_media_id_account_id_key"
+pg_restore: from TOC entry 4141; 2606 16737 CONSTRAINT media_meta_sync media_meta_sync_media_id_account_id_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "media_meta_sync_media_id_account_id_key" already exists
+Command was: ALTER TABLE ONLY coexistence.media_meta_sync
+    ADD CONSTRAINT media_meta_sync_media_id_account_id_key UNIQUE (media_id, account_id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.media_meta_sync media_meta_sync_pkey"
+pg_restore: from TOC entry 4143; 2606 16739 CONSTRAINT media_meta_sync media_meta_sync_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "media_meta_sync" are not allowed
+Command was: ALTER TABLE ONLY coexistence.media_meta_sync
+    ADD CONSTRAINT media_meta_sync_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.media_objects media_objects_pkey"
+pg_restore: from TOC entry 4145; 2606 16741 CONSTRAINT media_objects media_objects_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "media_objects" are not allowed
+Command was: ALTER TABLE ONLY coexistence.media_objects
+    ADD CONSTRAINT media_objects_pkey PRIMARY KEY (object_key);
+
+
+pg_restore: creating CONSTRAINT "coexistence.message_reactions message_reactions_pkey"
+pg_restore: from TOC entry 4149; 2606 16743 CONSTRAINT message_reactions message_reactions_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "message_reactions" are not allowed
+Command was: ALTER TABLE ONLY coexistence.message_reactions
+    ADD CONSTRAINT message_reactions_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.message_reactions message_reactions_target_message_id_direction_key"
+pg_restore: from TOC entry 4151; 2606 16745 CONSTRAINT message_reactions message_reactions_target_message_id_direction_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "message_reactions_target_message_id_direction_key" already exists
+Command was: ALTER TABLE ONLY coexistence.message_reactions
+    ADD CONSTRAINT message_reactions_target_message_id_direction_key UNIQUE (target_message_id, direction);
+
+
+pg_restore: creating CONSTRAINT "coexistence.message_template_analytics_daily message_template_analytics_daily_pkey"
+pg_restore: from TOC entry 4154; 2606 16747 CONSTRAINT message_template_analytics_daily message_template_analytics_daily_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "message_template_analytics_daily" are not allowed
+Command was: ALTER TABLE ONLY coexistence.message_template_analytics_daily
+    ADD CONSTRAINT message_template_analytics_daily_pkey PRIMARY KEY (template_id, day);
+
+
+pg_restore: creating CONSTRAINT "coexistence.message_template_revisions message_template_revisions_pkey"
+pg_restore: from TOC entry 4157; 2606 16749 CONSTRAINT message_template_revisions message_template_revisions_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "message_template_revisions" are not allowed
+Command was: ALTER TABLE ONLY coexistence.message_template_revisions
+    ADD CONSTRAINT message_template_revisions_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.message_templates message_templates_pkey"
+pg_restore: from TOC entry 4165; 2606 16751 CONSTRAINT message_templates message_templates_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "message_templates" are not allowed
+Command was: ALTER TABLE ONLY coexistence.message_templates
+    ADD CONSTRAINT message_templates_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.pipeline_stages pipeline_stages_pkey"
+pg_restore: from TOC entry 4168; 2606 16753 CONSTRAINT pipeline_stages pipeline_stages_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "pipeline_stages" are not allowed
+Command was: ALTER TABLE ONLY coexistence.pipeline_stages
+    ADD CONSTRAINT pipeline_stages_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.pipelines pipelines_pkey"
+pg_restore: from TOC entry 4170; 2606 16755 CONSTRAINT pipelines pipelines_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "pipelines" are not allowed
+Command was: ALTER TABLE ONLY coexistence.pipelines
+    ADD CONSTRAINT pipelines_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.retarget_customers retarget_customers_pkey"
+pg_restore: from TOC entry 4245; 2606 24587 CONSTRAINT retarget_customers retarget_customers_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "retarget_customers" are not allowed
+Command was: ALTER TABLE ONLY coexistence.retarget_customers
+    ADD CONSTRAINT retarget_customers_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.retarget_sheet_settings retarget_sheet_settings_pkey"
+pg_restore: from TOC entry 4247; 2606 24603 CONSTRAINT retarget_sheet_settings retarget_sheet_settings_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "retarget_sheet_settings" are not allowed
+Command was: ALTER TABLE ONLY coexistence.retarget_sheet_settings
+    ADD CONSTRAINT retarget_sheet_settings_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.retarget_sync_log retarget_sync_log_pkey"
+pg_restore: from TOC entry 4250; 2606 24620 CONSTRAINT retarget_sync_log retarget_sync_log_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "retarget_sync_log" are not allowed
+Command was: ALTER TABLE ONLY coexistence.retarget_sync_log
+    ADD CONSTRAINT retarget_sync_log_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.shown_products shown_products_pkey"
+pg_restore: from TOC entry 4285; 2606 82466 CONSTRAINT shown_products shown_products_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "shown_products" are not allowed
+Command was: ALTER TABLE ONLY coexistence.shown_products
+    ADD CONSTRAINT shown_products_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.tags tags_pkey"
+pg_restore: from TOC entry 4172; 2606 16757 CONSTRAINT tags tags_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "tags" are not allowed
+Command was: ALTER TABLE ONLY coexistence.tags
+    ADD CONSTRAINT tags_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.team_members team_members_bda_id_key"
+pg_restore: from TOC entry 4175; 2606 16759 CONSTRAINT team_members team_members_bda_id_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "team_members_bda_id_key" already exists
+Command was: ALTER TABLE ONLY coexistence.team_members
+    ADD CONSTRAINT team_members_bda_id_key UNIQUE (bda_id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.team_members team_members_pkey"
+pg_restore: from TOC entry 4177; 2606 16761 CONSTRAINT team_members team_members_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "team_members" are not allowed
+Command was: ALTER TABLE ONLY coexistence.team_members
+    ADD CONSTRAINT team_members_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.user_audit_log user_audit_log_pkey"
+pg_restore: from TOC entry 4183; 2606 16763 CONSTRAINT user_audit_log user_audit_log_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "user_audit_log" are not allowed
+Command was: ALTER TABLE ONLY coexistence.user_audit_log
+    ADD CONSTRAINT user_audit_log_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.user_wa_assignments user_wa_assignments_pkey"
+pg_restore: from TOC entry 4186; 2606 16765 CONSTRAINT user_wa_assignments user_wa_assignments_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "user_wa_assignments" are not allowed
+Command was: ALTER TABLE ONLY coexistence.user_wa_assignments
+    ADD CONSTRAINT user_wa_assignments_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.user_wa_assignments user_wa_assignments_user_id_wa_number_key"
+pg_restore: from TOC entry 4188; 2606 16767 CONSTRAINT user_wa_assignments user_wa_assignments_user_id_wa_number_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "user_wa_assignments_user_id_wa_number_key" already exists
+Command was: ALTER TABLE ONLY coexistence.user_wa_assignments
+    ADD CONSTRAINT user_wa_assignments_user_id_wa_number_key UNIQUE (user_id, wa_number);
+
+
+pg_restore: creating CONSTRAINT "coexistence.wa_links wa_links_pkey"
+pg_restore: from TOC entry 4192; 2606 16769 CONSTRAINT wa_links wa_links_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "wa_links" are not allowed
+Command was: ALTER TABLE ONLY coexistence.wa_links
+    ADD CONSTRAINT wa_links_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.wa_links wa_links_slug_key"
+pg_restore: from TOC entry 4194; 2606 16771 CONSTRAINT wa_links wa_links_slug_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "wa_links_slug_key" already exists
+Command was: ALTER TABLE ONLY coexistence.wa_links
+    ADD CONSTRAINT wa_links_slug_key UNIQUE (slug);
+
+
+pg_restore: creating CONSTRAINT "coexistence.webhook_events webhook_events_pkey"
+pg_restore: from TOC entry 4201; 2606 16773 CONSTRAINT webhook_events webhook_events_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "webhook_events" are not allowed
+Command was: ALTER TABLE ONLY coexistence.webhook_events
+    ADD CONSTRAINT webhook_events_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.whatsapp_accounts whatsapp_accounts_phone_number_id_key"
+pg_restore: from TOC entry 4205; 2606 16775 CONSTRAINT whatsapp_accounts whatsapp_accounts_phone_number_id_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "whatsapp_accounts_phone_number_id_key" already exists
+Command was: ALTER TABLE ONLY coexistence.whatsapp_accounts
+    ADD CONSTRAINT whatsapp_accounts_phone_number_id_key UNIQUE (phone_number_id);
+
+
+pg_restore: creating CONSTRAINT "coexistence.whatsapp_accounts whatsapp_accounts_pkey"
+pg_restore: from TOC entry 4207; 2606 16777 CONSTRAINT whatsapp_accounts whatsapp_accounts_pkey postgres
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "whatsapp_accounts" are not allowed
+Command was: ALTER TABLE ONLY coexistence.whatsapp_accounts
+    ADD CONSTRAINT whatsapp_accounts_pkey PRIMARY KEY (id);
+
+
+pg_restore: creating INDEX "coexistence.ai_models_provider_idx"
+pg_restore: from TOC entry 4065; 1259 16778 INDEX ai_models_provider_idx postgres
+pg_restore: error: could not execute query: ERROR:  relation "ai_models_provider_idx" already exists
+Command was: CREATE INDEX ai_models_provider_idx ON coexistence.ai_models USING btree (provider);
+
+
+pg_restore: creating INDEX "coexistence.idx_audit_action"
+pg_restore: from TOC entry 4178; 1259 16779 INDEX idx_audit_action postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_audit_action" already exists
+Command was: CREATE INDEX idx_audit_action ON coexistence.user_audit_log USING btree (action);
+
+
+pg_restore: creating INDEX "coexistence.idx_audit_actor"
+pg_restore: from TOC entry 4179; 1259 16780 INDEX idx_audit_actor postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_audit_actor" already exists
+Command was: CREATE INDEX idx_audit_actor ON coexistence.user_audit_log USING btree (actor_user_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_audit_created"
+pg_restore: from TOC entry 4180; 1259 16781 INDEX idx_audit_created postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_audit_created" already exists
+Command was: CREATE INDEX idx_audit_created ON coexistence.user_audit_log USING btree (created_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_audit_target"
+pg_restore: from TOC entry 4181; 1259 16782 INDEX idx_audit_target postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_audit_target" already exists
+Command was: CREATE INDEX idx_audit_target ON coexistence.user_audit_log USING btree (target_type, target_id, created_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_automation_executions_automation_id"
+pg_restore: from TOC entry 4075; 1259 16783 INDEX idx_automation_executions_automation_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_automation_executions_automation_id" already exists
+Command was: CREATE INDEX idx_automation_executions_automation_id ON coexistence.automation_executions USING btree (automation_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_automation_executions_started_at"
+pg_restore: from TOC entry 4076; 1259 16784 INDEX idx_automation_executions_started_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_automation_executions_started_at" already exists
+Command was: CREATE INDEX idx_automation_executions_started_at ON coexistence.automation_executions USING btree (started_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_automation_executions_status"
+pg_restore: from TOC entry 4077; 1259 16785 INDEX idx_automation_executions_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_automation_executions_status" already exists
+Command was: CREATE INDEX idx_automation_executions_status ON coexistence.automation_executions USING btree (status);
+
+
+pg_restore: creating INDEX "coexistence.idx_broadcast_logs_broadcast_id"
+pg_restore: from TOC entry 4081; 1259 16786 INDEX idx_broadcast_logs_broadcast_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_broadcast_logs_broadcast_id" already exists
+Command was: CREATE INDEX idx_broadcast_logs_broadcast_id ON coexistence.broadcast_logs USING btree (broadcast_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_broadcast_logs_sent_at"
+pg_restore: from TOC entry 4082; 1259 16787 INDEX idx_broadcast_logs_sent_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_broadcast_logs_sent_at" already exists
+Command was: CREATE INDEX idx_broadcast_logs_sent_at ON coexistence.broadcast_logs USING btree (sent_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_broadcast_logs_wa_message_id"
+pg_restore: from TOC entry 4083; 1259 16788 INDEX idx_broadcast_logs_wa_message_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_broadcast_logs_wa_message_id" already exists
+Command was: CREATE INDEX idx_broadcast_logs_wa_message_id ON coexistence.broadcast_logs USING btree (wa_message_id) WHERE (wa_message_id IS NOT NULL);
+
+
+pg_restore: creating INDEX "coexistence.idx_broadcasts_created_at"
+pg_restore: from TOC entry 4086; 1259 16789 INDEX idx_broadcasts_created_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_broadcasts_created_at" already exists
+Command was: CREATE INDEX idx_broadcasts_created_at ON coexistence.broadcasts USING btree (created_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_broadcasts_scheduled"
+pg_restore: from TOC entry 4087; 1259 16790 INDEX idx_broadcasts_scheduled postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_broadcasts_scheduled" already exists
+Command was: CREATE INDEX idx_broadcasts_scheduled ON coexistence.broadcasts USING btree (scheduled_at, status) WHERE (((status)::text = 'SCHEDULED'::text) AND (scheduled_at IS NOT NULL));
+
+
+pg_restore: creating INDEX "coexistence.idx_broadcasts_status"
+pg_restore: from TOC entry 4088; 1259 16791 INDEX idx_broadcasts_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_broadcasts_status" already exists
+Command was: CREATE INDEX idx_broadcasts_status ON coexistence.broadcasts USING btree (status);
+
+
+pg_restore: creating INDEX "coexistence.idx_chat_contact"
+pg_restore: from TOC entry 4095; 1259 16792 INDEX idx_chat_contact postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_chat_contact" already exists
+Command was: CREATE INDEX idx_chat_contact ON coexistence.chat_history USING btree (wa_number, contact_number, "timestamp" DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_chat_history_context"
+pg_restore: from TOC entry 4096; 1259 16793 INDEX idx_chat_history_context postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_chat_history_context" already exists
+Command was: CREATE INDEX idx_chat_history_context ON coexistence.chat_history USING btree (context_message_id) WHERE (context_message_id IS NOT NULL);
+
+
+pg_restore: creating INDEX "coexistence.idx_chat_history_starred"
+pg_restore: from TOC entry 4097; 1259 16794 INDEX idx_chat_history_starred postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_chat_history_starred" already exists
+Command was: CREATE INDEX idx_chat_history_starred ON coexistence.chat_history USING btree (wa_number, contact_number) WHERE (starred = true);
+
+
+pg_restore: creating INDEX "coexistence.idx_chat_incoming"
+pg_restore: from TOC entry 4098; 1259 16795 INDEX idx_chat_incoming postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_chat_incoming" already exists
+Command was: CREATE INDEX idx_chat_incoming ON coexistence.chat_history USING btree (wa_number, contact_number, "timestamp" DESC) WHERE (direction = 'incoming'::text);
+
+
+pg_restore: creating INDEX "coexistence.idx_chat_media_status"
+pg_restore: from TOC entry 4099; 1259 16796 INDEX idx_chat_media_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_chat_media_status" already exists
+Command was: CREATE INDEX idx_chat_media_status ON coexistence.chat_history USING btree (media_status) WHERE (media_status IS NOT NULL);
+
+
+pg_restore: creating INDEX "coexistence.idx_chat_phone_number_id_contact"
+pg_restore: from TOC entry 4100; 1259 16797 INDEX idx_chat_phone_number_id_contact postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_chat_phone_number_id_contact" already exists
+Command was: CREATE INDEX idx_chat_phone_number_id_contact ON coexistence.chat_history USING btree (phone_number_id, contact_number, "timestamp" DESC) WHERE (direction = 'incoming'::text);
+
+
+pg_restore: creating INDEX "coexistence.idx_chat_timestamp"
+pg_restore: from TOC entry 4101; 1259 16798 INDEX idx_chat_timestamp postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_chat_timestamp" already exists
+Command was: CREATE INDEX idx_chat_timestamp ON coexistence.chat_history USING btree ("timestamp" DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_chat_wa_number"
+pg_restore: from TOC entry 4102; 1259 16799 INDEX idx_chat_wa_number postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_chat_wa_number" already exists
+Command was: CREATE INDEX idx_chat_wa_number ON coexistence.chat_history USING btree (wa_number, "timestamp" DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_chatbots_status"
+pg_restore: from TOC entry 4105; 1259 16800 INDEX idx_chatbots_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_chatbots_status" already exists
+Command was: CREATE INDEX idx_chatbots_status ON coexistence.chatbots USING btree (status);
+
+
+pg_restore: creating INDEX "coexistence.idx_contact_field_definitions_sort"
+pg_restore: from TOC entry 4108; 1259 16801 INDEX idx_contact_field_definitions_sort postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_contact_field_definitions_sort" already exists
+Command was: CREATE INDEX idx_contact_field_definitions_sort ON coexistence.contact_field_definitions USING btree (sort_order);
+
+
+pg_restore: creating INDEX "coexistence.idx_contacts_assigned_user"
+pg_restore: from TOC entry 4113; 1259 16802 INDEX idx_contacts_assigned_user postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_contacts_assigned_user" already exists
+Command was: CREATE INDEX idx_contacts_assigned_user ON coexistence.contacts USING btree (assigned_user_id) WHERE (assigned_user_id IS NOT NULL);
+
+
+pg_restore: creating INDEX "coexistence.idx_contacts_custom_fields"
+pg_restore: from TOC entry 4114; 1259 16803 INDEX idx_contacts_custom_fields postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_contacts_custom_fields" already exists
+Command was: CREATE INDEX idx_contacts_custom_fields ON coexistence.contacts USING gin (custom_fields);
+
+
+pg_restore: creating INDEX "coexistence.idx_contacts_display_name"
+pg_restore: from TOC entry 4115; 1259 16804 INDEX idx_contacts_display_name postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_contacts_display_name" already exists
+Command was: CREATE INDEX idx_contacts_display_name ON coexistence.contacts USING btree (wa_number, COALESCE(name, profile_name));
+
+
+pg_restore: creating INDEX "coexistence.idx_contacts_lookup"
+pg_restore: from TOC entry 4116; 1259 16805 INDEX idx_contacts_lookup postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_contacts_lookup" already exists
+Command was: CREATE INDEX idx_contacts_lookup ON coexistence.contacts USING btree (wa_number, contact_number);
+
+
+pg_restore: creating INDEX "coexistence.idx_conversation_messages_customer_id"
+pg_restore: from TOC entry 4288; 1259 82479 INDEX idx_conversation_messages_customer_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_conversation_messages_customer_id" already exists
+Command was: CREATE INDEX idx_conversation_messages_customer_id ON coexistence.conversation_messages USING btree (customer_id, created_at);
+
+
+pg_restore: creating INDEX "coexistence.idx_customer_interests_customer"
+pg_restore: from TOC entry 4291; 1259 82496 INDEX idx_customer_interests_customer postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_customer_interests_customer" already exists
+Command was: CREATE INDEX idx_customer_interests_customer ON coexistence.customer_interests USING btree (customer_number, workspace_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_customer_interests_dedupe"
+pg_restore: from TOC entry 4292; 1259 82497 INDEX idx_customer_interests_dedupe postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_customer_interests_dedupe" already exists
+Command was: CREATE UNIQUE INDEX idx_customer_interests_dedupe ON coexistence.customer_interests USING btree (workspace_id, customer_number, product_category, product_color) WHERE (status = 'open'::text);
+
+
+pg_restore: creating INDEX "coexistence.idx_customer_interests_status"
+pg_restore: from TOC entry 4293; 1259 82495 INDEX idx_customer_interests_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_customer_interests_status" already exists
+Command was: CREATE INDEX idx_customer_interests_status ON coexistence.customer_interests USING btree (status, workspace_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_deals_assigned"
+pg_restore: from TOC entry 4121; 1259 16806 INDEX idx_deals_assigned postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_deals_assigned" already exists
+Command was: CREATE INDEX idx_deals_assigned ON coexistence.deals USING btree (assigned_user_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_deals_pipeline"
+pg_restore: from TOC entry 4122; 1259 16807 INDEX idx_deals_pipeline postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_deals_pipeline" already exists
+Command was: CREATE INDEX idx_deals_pipeline ON coexistence.deals USING btree (pipeline_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_deals_pipeline_position"
+pg_restore: from TOC entry 4123; 1259 16808 INDEX idx_deals_pipeline_position postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_deals_pipeline_position" already exists
+Command was: CREATE INDEX idx_deals_pipeline_position ON coexistence.deals USING btree (pipeline_id, stage_id, "position");
+
+
+pg_restore: creating INDEX "coexistence.idx_deals_stage"
+pg_restore: from TOC entry 4124; 1259 16809 INDEX idx_deals_stage postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_deals_stage" already exists
+Command was: CREATE INDEX idx_deals_stage ON coexistence.deals USING btree (stage_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_deals_status"
+pg_restore: from TOC entry 4125; 1259 16810 INDEX idx_deals_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_deals_status" already exists
+Command was: CREATE INDEX idx_deals_status ON coexistence.deals USING btree (pipeline_id, status);
+
+
+pg_restore: creating INDEX "coexistence.idx_deals_won_at"
+pg_restore: from TOC entry 4126; 1259 16811 INDEX idx_deals_won_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_deals_won_at" already exists
+Command was: CREATE INDEX idx_deals_won_at ON coexistence.deals USING btree (won_at DESC) WHERE (status = 'won'::text);
+
+
+pg_restore: creating INDEX "coexistence.idx_email_campaigns_created_at"
+pg_restore: from TOC entry 4261; 1259 24670 INDEX idx_email_campaigns_created_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_email_campaigns_created_at" already exists
+Command was: CREATE INDEX idx_email_campaigns_created_at ON coexistence.email_campaigns USING btree (created_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_email_inbox_contact_email"
+pg_restore: from TOC entry 4266; 1259 41008 INDEX idx_email_inbox_contact_email postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_email_inbox_contact_email" already exists
+Command was: CREATE INDEX idx_email_inbox_contact_email ON coexistence.email_inbox_messages USING btree (contact_email);
+
+
+pg_restore: creating INDEX "coexistence.idx_email_inbox_created_at"
+pg_restore: from TOC entry 4267; 1259 41009 INDEX idx_email_inbox_created_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_email_inbox_created_at" already exists
+Command was: CREATE INDEX idx_email_inbox_created_at ON coexistence.email_inbox_messages USING btree (created_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_email_inbox_message_id"
+pg_restore: from TOC entry 4268; 1259 41134 INDEX idx_email_inbox_message_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_email_inbox_message_id" already exists
+Command was: CREATE UNIQUE INDEX idx_email_inbox_message_id ON coexistence.email_inbox_messages USING btree (message_id) WHERE (message_id IS NOT NULL);
+
+
+pg_restore: creating INDEX "coexistence.idx_email_subscribers_created_at"
+pg_restore: from TOC entry 4255; 1259 24639 INDEX idx_email_subscribers_created_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_email_subscribers_created_at" already exists
+Command was: CREATE INDEX idx_email_subscribers_created_at ON coexistence.email_subscribers USING btree (created_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_email_subscribers_status"
+pg_restore: from TOC entry 4256; 1259 24638 INDEX idx_email_subscribers_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_email_subscribers_status" already exists
+Command was: CREATE INDEX idx_email_subscribers_status ON coexistence.email_subscribers USING btree (status);
+
+
+pg_restore: creating INDEX "coexistence.idx_execution_steps_exec_wa_status"
+pg_restore: from TOC entry 4068; 1259 16812 INDEX idx_execution_steps_exec_wa_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_execution_steps_exec_wa_status" already exists
+Command was: CREATE INDEX idx_execution_steps_exec_wa_status ON coexistence.automation_execution_steps USING btree (execution_id, wa_message_status);
+
+
+pg_restore: creating INDEX "coexistence.idx_execution_steps_execution_id"
+pg_restore: from TOC entry 4069; 1259 16813 INDEX idx_execution_steps_execution_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_execution_steps_execution_id" already exists
+Command was: CREATE INDEX idx_execution_steps_execution_id ON coexistence.automation_execution_steps USING btree (execution_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_execution_steps_node_id"
+pg_restore: from TOC entry 4070; 1259 16814 INDEX idx_execution_steps_node_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_execution_steps_node_id" already exists
+Command was: CREATE INDEX idx_execution_steps_node_id ON coexistence.automation_execution_steps USING btree (node_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_execution_steps_wa_msg_id"
+pg_restore: from TOC entry 4071; 1259 16815 INDEX idx_execution_steps_wa_msg_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_execution_steps_wa_msg_id" already exists
+Command was: CREATE INDEX idx_execution_steps_wa_msg_id ON coexistence.automation_execution_steps USING btree (wa_message_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_execution_steps_wa_status"
+pg_restore: from TOC entry 4072; 1259 16816 INDEX idx_execution_steps_wa_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_execution_steps_wa_status" already exists
+Command was: CREATE INDEX idx_execution_steps_wa_status ON coexistence.automation_execution_steps USING btree (wa_message_status);
+
+
+pg_restore: creating INDEX "coexistence.idx_executions_resume_lookup"
+pg_restore: from TOC entry 4078; 1259 16817 INDEX idx_executions_resume_lookup postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_executions_resume_lookup" already exists
+Command was: CREATE INDEX idx_executions_resume_lookup ON coexistence.automation_executions USING btree (wa_number, contact_number, expires_at) WHERE ((status)::text = 'paused'::text);
+
+
+pg_restore: creating INDEX "coexistence.idx_intent_history_customer"
+pg_restore: from TOC entry 4302; 1259 123472 INDEX idx_intent_history_customer postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_intent_history_customer" already exists
+Command was: CREATE INDEX idx_intent_history_customer ON coexistence.customer_intent_history USING btree (wa_number, contact_number, created_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_intent_profiles_intent"
+pg_restore: from TOC entry 4298; 1259 123460 INDEX idx_intent_profiles_intent postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_intent_profiles_intent" already exists
+Command was: CREATE INDEX idx_intent_profiles_intent ON coexistence.customer_intent_profiles USING btree (workspace_id, current_intent);
+
+
+pg_restore: creating INDEX "coexistence.idx_intent_profiles_score"
+pg_restore: from TOC entry 4299; 1259 123459 INDEX idx_intent_profiles_score postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_intent_profiles_score" already exists
+Command was: CREATE INDEX idx_intent_profiles_score ON coexistence.customer_intent_profiles USING btree (workspace_id, buying_score DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_knowledge_chunks_document_id"
+pg_restore: from TOC entry 4278; 1259 82453 INDEX idx_knowledge_chunks_document_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_knowledge_chunks_document_id" already exists
+Command was: CREATE INDEX idx_knowledge_chunks_document_id ON coexistence.knowledge_chunks USING btree (document_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_knowledge_chunks_embedding"
+pg_restore: from TOC entry 4279; 1259 82454 INDEX idx_knowledge_chunks_embedding postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_knowledge_chunks_embedding" already exists
+Command was: CREATE INDEX idx_knowledge_chunks_embedding ON coexistence.knowledge_chunks USING ivfflat (embedding public.vector_cosine_ops) WITH (lists='100');
+
+
+pg_restore: creating INDEX "coexistence.idx_knowledge_chunks_workspace_id"
+pg_restore: from TOC entry 4280; 1259 82452 INDEX idx_knowledge_chunks_workspace_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_knowledge_chunks_workspace_id" already exists
+Command was: CREATE INDEX idx_knowledge_chunks_workspace_id ON coexistence.knowledge_chunks USING btree (workspace_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_knowledge_documents_workspace_id"
+pg_restore: from TOC entry 4275; 1259 82436 INDEX idx_knowledge_documents_workspace_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_knowledge_documents_workspace_id" already exists
+Command was: CREATE INDEX idx_knowledge_documents_workspace_id ON coexistence.knowledge_documents USING btree (workspace_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_media_library_account"
+pg_restore: from TOC entry 4133; 1259 16818 INDEX idx_media_library_account postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_media_library_account" already exists
+Command was: CREATE INDEX idx_media_library_account ON coexistence.media_library USING btree (whatsapp_account_id) WHERE (deleted_at IS NULL);
+
+
+pg_restore: creating INDEX "coexistence.idx_media_library_type"
+pg_restore: from TOC entry 4134; 1259 16819 INDEX idx_media_library_type postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_media_library_type" already exists
+Command was: CREATE INDEX idx_media_library_type ON coexistence.media_library USING btree (media_type) WHERE (deleted_at IS NULL);
+
+
+pg_restore: creating INDEX "coexistence.idx_media_library_uploaded_at"
+pg_restore: from TOC entry 4135; 1259 16820 INDEX idx_media_library_uploaded_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_media_library_uploaded_at" already exists
+Command was: CREATE INDEX idx_media_library_uploaded_at ON coexistence.media_library USING btree (uploaded_at DESC) WHERE (deleted_at IS NULL);
+
+
+pg_restore: creating INDEX "coexistence.idx_media_meta_sync_account"
+pg_restore: from TOC entry 4138; 1259 16821 INDEX idx_media_meta_sync_account postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_media_meta_sync_account" already exists
+Command was: CREATE INDEX idx_media_meta_sync_account ON coexistence.media_meta_sync USING btree (account_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_media_meta_sync_expiring"
+pg_restore: from TOC entry 4139; 1259 16822 INDEX idx_media_meta_sync_expiring postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_media_meta_sync_expiring" already exists
+Command was: CREATE INDEX idx_media_meta_sync_expiring ON coexistence.media_meta_sync USING btree (expires_at) WHERE (status = 'synced'::text);
+
+
+pg_restore: creating INDEX "coexistence.idx_message_reactions_convo"
+pg_restore: from TOC entry 4146; 1259 16823 INDEX idx_message_reactions_convo postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_message_reactions_convo" already exists
+Command was: CREATE INDEX idx_message_reactions_convo ON coexistence.message_reactions USING btree (wa_number, contact_number);
+
+
+pg_restore: creating INDEX "coexistence.idx_message_reactions_target"
+pg_restore: from TOC entry 4147; 1259 16824 INDEX idx_message_reactions_target postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_message_reactions_target" already exists
+Command was: CREATE INDEX idx_message_reactions_target ON coexistence.message_reactions USING btree (target_message_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_message_templates_category"
+pg_restore: from TOC entry 4158; 1259 16825 INDEX idx_message_templates_category postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_message_templates_category" already exists
+Command was: CREATE INDEX idx_message_templates_category ON coexistence.message_templates USING btree (category);
+
+
+pg_restore: creating INDEX "coexistence.idx_message_templates_group_key"
+pg_restore: from TOC entry 4159; 1259 16826 INDEX idx_message_templates_group_key postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_message_templates_group_key" already exists
+Command was: CREATE INDEX idx_message_templates_group_key ON coexistence.message_templates USING btree (template_group_key);
+
+
+pg_restore: creating INDEX "coexistence.idx_message_templates_language"
+pg_restore: from TOC entry 4160; 1259 16827 INDEX idx_message_templates_language postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_message_templates_language" already exists
+Command was: CREATE INDEX idx_message_templates_language ON coexistence.message_templates USING btree (language);
+
+
+pg_restore: creating INDEX "coexistence.idx_message_templates_name"
+pg_restore: from TOC entry 4161; 1259 16828 INDEX idx_message_templates_name postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_message_templates_name" already exists
+Command was: CREATE INDEX idx_message_templates_name ON coexistence.message_templates USING btree (name);
+
+
+pg_restore: creating INDEX "coexistence.idx_message_templates_status"
+pg_restore: from TOC entry 4162; 1259 16829 INDEX idx_message_templates_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_message_templates_status" already exists
+Command was: CREATE INDEX idx_message_templates_status ON coexistence.message_templates USING btree (status);
+
+
+pg_restore: creating INDEX "coexistence.idx_message_templates_whatsapp_account"
+pg_restore: from TOC entry 4163; 1259 16830 INDEX idx_message_templates_whatsapp_account postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_message_templates_whatsapp_account" already exists
+Command was: CREATE INDEX idx_message_templates_whatsapp_account ON coexistence.message_templates USING btree (whatsapp_account_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_pipeline_stages_pipeline"
+pg_restore: from TOC entry 4166; 1259 16831 INDEX idx_pipeline_stages_pipeline postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_pipeline_stages_pipeline" already exists
+Command was: CREATE INDEX idx_pipeline_stages_pipeline ON coexistence.pipeline_stages USING btree (pipeline_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_retarget_customers_created_at"
+pg_restore: from TOC entry 4241; 1259 24590 INDEX idx_retarget_customers_created_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_retarget_customers_created_at" already exists
+Command was: CREATE INDEX idx_retarget_customers_created_at ON coexistence.retarget_customers USING btree (created_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_retarget_customers_phone"
+pg_restore: from TOC entry 4242; 1259 24588 INDEX idx_retarget_customers_phone postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_retarget_customers_phone" already exists
+Command was: CREATE INDEX idx_retarget_customers_phone ON coexistence.retarget_customers USING btree (phone);
+
+
+pg_restore: creating INDEX "coexistence.idx_retarget_customers_status"
+pg_restore: from TOC entry 4243; 1259 24589 INDEX idx_retarget_customers_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_retarget_customers_status" already exists
+Command was: CREATE INDEX idx_retarget_customers_status ON coexistence.retarget_customers USING btree (status);
+
+
+pg_restore: creating INDEX "coexistence.idx_retarget_sync_log_started_at"
+pg_restore: from TOC entry 4248; 1259 24621 INDEX idx_retarget_sync_log_started_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_retarget_sync_log_started_at" already exists
+Command was: CREATE INDEX idx_retarget_sync_log_started_at ON coexistence.retarget_sync_log USING btree (started_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_shown_products_customer_id"
+pg_restore: from TOC entry 4283; 1259 82467 INDEX idx_shown_products_customer_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_shown_products_customer_id" already exists
+Command was: CREATE INDEX idx_shown_products_customer_id ON coexistence.shown_products USING btree (customer_id, shown_at);
+
+
+pg_restore: creating INDEX "coexistence.idx_team_members_bda_id"
+pg_restore: from TOC entry 4173; 1259 16832 INDEX idx_team_members_bda_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_team_members_bda_id" already exists
+Command was: CREATE INDEX idx_team_members_bda_id ON coexistence.team_members USING btree (bda_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_template_analytics_day"
+pg_restore: from TOC entry 4152; 1259 16833 INDEX idx_template_analytics_day postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_template_analytics_day" already exists
+Command was: CREATE INDEX idx_template_analytics_day ON coexistence.message_template_analytics_daily USING btree (day DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_template_revisions_template"
+pg_restore: from TOC entry 4155; 1259 16834 INDEX idx_template_revisions_template postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_template_revisions_template" already exists
+Command was: CREATE INDEX idx_template_revisions_template ON coexistence.message_template_revisions USING btree (template_id, revised_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_user_wa_assignments_wa"
+pg_restore: from TOC entry 4184; 1259 16835 INDEX idx_user_wa_assignments_wa postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_user_wa_assignments_wa" already exists
+Command was: CREATE INDEX idx_user_wa_assignments_wa ON coexistence.user_wa_assignments USING btree (wa_number);
+
+
+pg_restore: creating INDEX "coexistence.idx_wa_links_created_at"
+pg_restore: from TOC entry 4189; 1259 16836 INDEX idx_wa_links_created_at postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_wa_links_created_at" already exists
+Command was: CREATE INDEX idx_wa_links_created_at ON coexistence.wa_links USING btree (created_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_wa_links_slug"
+pg_restore: from TOC entry 4190; 1259 16837 INDEX idx_wa_links_slug postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_wa_links_slug" already exists
+Command was: CREATE INDEX idx_wa_links_slug ON coexistence.wa_links USING btree (slug);
+
+
+pg_restore: creating INDEX "coexistence.idx_webhook_events_kind"
+pg_restore: from TOC entry 4195; 1259 16838 INDEX idx_webhook_events_kind postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_webhook_events_kind" already exists
+Command was: CREATE INDEX idx_webhook_events_kind ON coexistence.webhook_events USING btree (payload_kind);
+
+
+pg_restore: creating INDEX "coexistence.idx_webhook_events_phone"
+pg_restore: from TOC entry 4196; 1259 16839 INDEX idx_webhook_events_phone postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_webhook_events_phone" already exists
+Command was: CREATE INDEX idx_webhook_events_phone ON coexistence.webhook_events USING btree (phone_number_id);
+
+
+pg_restore: creating INDEX "coexistence.idx_webhook_events_received"
+pg_restore: from TOC entry 4197; 1259 16840 INDEX idx_webhook_events_received postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_webhook_events_received" already exists
+Command was: CREATE INDEX idx_webhook_events_received ON coexistence.webhook_events USING btree (received_at DESC);
+
+
+pg_restore: creating INDEX "coexistence.idx_webhook_events_status"
+pg_restore: from TOC entry 4198; 1259 16841 INDEX idx_webhook_events_status postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_webhook_events_status" already exists
+Command was: CREATE INDEX idx_webhook_events_status ON coexistence.webhook_events USING btree (processing_status);
+
+
+pg_restore: creating INDEX "coexistence.idx_webhook_events_subtype"
+pg_restore: from TOC entry 4199; 1259 16842 INDEX idx_webhook_events_subtype postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_webhook_events_subtype" already exists
+Command was: CREATE INDEX idx_webhook_events_subtype ON coexistence.webhook_events USING btree (payload_subtype);
+
+
+pg_restore: creating INDEX "coexistence.idx_whatsapp_accounts_one_default"
+pg_restore: from TOC entry 4202; 1259 16843 INDEX idx_whatsapp_accounts_one_default postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_whatsapp_accounts_one_default" already exists
+Command was: CREATE UNIQUE INDEX idx_whatsapp_accounts_one_default ON coexistence.whatsapp_accounts USING btree (is_default) WHERE (is_default = true);
+
+
+pg_restore: creating INDEX "coexistence.idx_whatsapp_accounts_phone_number_id"
+pg_restore: from TOC entry 4203; 1259 16844 INDEX idx_whatsapp_accounts_phone_number_id postgres
+pg_restore: error: could not execute query: ERROR:  relation "idx_whatsapp_accounts_phone_number_id" already exists
+Command was: CREATE INDEX idx_whatsapp_accounts_phone_number_id ON coexistence.whatsapp_accounts USING btree (phone_number_id);
+
+
+pg_restore: creating INDEX "coexistence.whatsapp_accounts_singleton"
+pg_restore: from TOC entry 4208; 1259 16845 INDEX whatsapp_accounts_singleton postgres
+pg_restore: error: could not execute query: ERROR:  relation "whatsapp_accounts_singleton" already exists
+Command was: CREATE UNIQUE INDEX whatsapp_accounts_singleton ON coexistence.whatsapp_accounts USING btree ((true));
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.akchat_users akchat_users_created_by_fkey"
+pg_restore: from TOC entry 4312; 2606 16891 FK CONSTRAINT akchat_users akchat_users_created_by_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "akchat_users_created_by_fkey" for relation "akchat_users" already exists
+Command was: ALTER TABLE ONLY coexistence.akchat_users
+    ADD CONSTRAINT akchat_users_created_by_fkey FOREIGN KEY (created_by) REFERENCES coexistence.akchat_users(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.automation_execution_steps automation_execution_steps_execution_id_fkey"
+pg_restore: from TOC entry 4303; 2606 16846 FK CONSTRAINT automation_execution_steps automation_execution_steps_execution_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "automation_execution_steps_execution_id_fkey" for relation "automation_execution_steps" already exists
+Command was: ALTER TABLE ONLY coexistence.automation_execution_steps
+    ADD CONSTRAINT automation_execution_steps_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES coexistence.automation_executions(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.automation_executions automation_executions_automation_id_fkey"
+pg_restore: from TOC entry 4304; 2606 16851 FK CONSTRAINT automation_executions automation_executions_automation_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "automation_executions_automation_id_fkey" for relation "automation_executions" already exists
+Command was: ALTER TABLE ONLY coexistence.automation_executions
+    ADD CONSTRAINT automation_executions_automation_id_fkey FOREIGN KEY (automation_id) REFERENCES coexistence.chatbots(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.broadcast_logs broadcast_logs_broadcast_id_fkey"
+pg_restore: from TOC entry 4305; 2606 16856 FK CONSTRAINT broadcast_logs broadcast_logs_broadcast_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "broadcast_logs_broadcast_id_fkey" for relation "broadcast_logs" already exists
+Command was: ALTER TABLE ONLY coexistence.broadcast_logs
+    ADD CONSTRAINT broadcast_logs_broadcast_id_fkey FOREIGN KEY (broadcast_id) REFERENCES coexistence.broadcasts(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.broadcasts broadcasts_template_id_fkey"
+pg_restore: from TOC entry 4306; 2606 16861 FK CONSTRAINT broadcasts broadcasts_template_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "broadcasts_template_id_fkey" for relation "broadcasts" already exists
+Command was: ALTER TABLE ONLY coexistence.broadcasts
+    ADD CONSTRAINT broadcasts_template_id_fkey FOREIGN KEY (template_id) REFERENCES coexistence.message_templates(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.contacts contacts_assigned_user_id_fkey"
+pg_restore: from TOC entry 4307; 2606 16866 FK CONSTRAINT contacts contacts_assigned_user_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "contacts_assigned_user_id_fkey" for relation "contacts" already exists
+Command was: ALTER TABLE ONLY coexistence.contacts
+    ADD CONSTRAINT contacts_assigned_user_id_fkey FOREIGN KEY (assigned_user_id) REFERENCES coexistence.akchat_users(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.deals deals_assigned_user_id_fkey"
+pg_restore: from TOC entry 4308; 2606 16871 FK CONSTRAINT deals deals_assigned_user_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "deals_assigned_user_id_fkey" for relation "deals" already exists
+Command was: ALTER TABLE ONLY coexistence.deals
+    ADD CONSTRAINT deals_assigned_user_id_fkey FOREIGN KEY (assigned_user_id) REFERENCES coexistence.akchat_users(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.deals deals_created_by_fkey"
+pg_restore: from TOC entry 4309; 2606 16876 FK CONSTRAINT deals deals_created_by_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "deals_created_by_fkey" for relation "deals" already exists
+Command was: ALTER TABLE ONLY coexistence.deals
+    ADD CONSTRAINT deals_created_by_fkey FOREIGN KEY (created_by) REFERENCES coexistence.akchat_users(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.deals deals_pipeline_id_fkey"
+pg_restore: from TOC entry 4310; 2606 16881 FK CONSTRAINT deals deals_pipeline_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "deals_pipeline_id_fkey" for relation "deals" already exists
+Command was: ALTER TABLE ONLY coexistence.deals
+    ADD CONSTRAINT deals_pipeline_id_fkey FOREIGN KEY (pipeline_id) REFERENCES coexistence.pipelines(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.deals deals_stage_id_fkey"
+pg_restore: from TOC entry 4311; 2606 16886 FK CONSTRAINT deals deals_stage_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "deals_stage_id_fkey" for relation "deals" already exists
+Command was: ALTER TABLE ONLY coexistence.deals
+    ADD CONSTRAINT deals_stage_id_fkey FOREIGN KEY (stage_id) REFERENCES coexistence.pipeline_stages(id) ON DELETE RESTRICT;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.email_campaigns email_campaigns_template_id_fkey"
+pg_restore: from TOC entry 4340; 2606 24665 FK CONSTRAINT email_campaigns email_campaigns_template_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "email_campaigns_template_id_fkey" for relation "email_campaigns" already exists
+Command was: ALTER TABLE ONLY coexistence.email_campaigns
+    ADD CONSTRAINT email_campaigns_template_id_fkey FOREIGN KEY (template_id) REFERENCES coexistence.email_templates(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.email_inbox_messages email_inbox_messages_subscriber_id_fkey"
+pg_restore: from TOC entry 4341; 2606 41003 FK CONSTRAINT email_inbox_messages email_inbox_messages_subscriber_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "email_inbox_messages_subscriber_id_fkey" for relation "email_inbox_messages" already exists
+Command was: ALTER TABLE ONLY coexistence.email_inbox_messages
+    ADD CONSTRAINT email_inbox_messages_subscriber_id_fkey FOREIGN KEY (subscriber_id) REFERENCES coexistence.email_subscribers(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.email_subscribers email_subscribers_source_id_fkey"
+pg_restore: from TOC entry 4339; 2606 32779 FK CONSTRAINT email_subscribers email_subscribers_source_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "email_subscribers_source_id_fkey" for relation "email_subscribers" already exists
+Command was: ALTER TABLE ONLY coexistence.email_subscribers
+    ADD CONSTRAINT email_subscribers_source_id_fkey FOREIGN KEY (source_id) REFERENCES coexistence.email_sheet_sources(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_ai_logs instagram_ai_logs_conversation_id_fkey"
+pg_restore: from TOC entry 4338; 2606 17175 FK CONSTRAINT instagram_ai_logs instagram_ai_logs_conversation_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_ai_logs_conversation_id_fkey" for relation "instagram_ai_logs" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_ai_logs
+    ADD CONSTRAINT instagram_ai_logs_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES coexistence.instagram_conversations(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_campaign_messages instagram_campaign_messages_campaign_id_fkey"
+pg_restore: from TOC entry 4331; 2606 17069 FK CONSTRAINT instagram_campaign_messages instagram_campaign_messages_campaign_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_campaign_messages_campaign_id_fkey" for relation "instagram_campaign_messages" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_campaign_messages
+    ADD CONSTRAINT instagram_campaign_messages_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES coexistence.instagram_campaigns(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_campaign_messages instagram_campaign_messages_contact_id_fkey"
+pg_restore: from TOC entry 4332; 2606 17074 FK CONSTRAINT instagram_campaign_messages instagram_campaign_messages_contact_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_campaign_messages_contact_id_fkey" for relation "instagram_campaign_messages" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_campaign_messages
+    ADD CONSTRAINT instagram_campaign_messages_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES coexistence.instagram_contacts(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_campaigns instagram_campaigns_instagram_account_id_fkey"
+pg_restore: from TOC entry 4330; 2606 17204 FK CONSTRAINT instagram_campaigns instagram_campaigns_instagram_account_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_campaigns_instagram_account_id_fkey" for relation "instagram_campaigns" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_campaigns
+    ADD CONSTRAINT instagram_campaigns_instagram_account_id_fkey FOREIGN KEY (instagram_account_id) REFERENCES coexistence.instagram_accounts(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_contacts instagram_contacts_instagram_account_id_fkey"
+pg_restore: from TOC entry 4325; 2606 17194 FK CONSTRAINT instagram_contacts instagram_contacts_instagram_account_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_contacts_instagram_account_id_fkey" for relation "instagram_contacts" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_contacts
+    ADD CONSTRAINT instagram_contacts_instagram_account_id_fkey FOREIGN KEY (instagram_account_id) REFERENCES coexistence.instagram_accounts(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_conversations instagram_conversations_contact_id_fkey"
+pg_restore: from TOC entry 4326; 2606 17014 FK CONSTRAINT instagram_conversations instagram_conversations_contact_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_conversations_contact_id_fkey" for relation "instagram_conversations" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_conversations
+    ADD CONSTRAINT instagram_conversations_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES coexistence.instagram_contacts(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_conversations instagram_conversations_instagram_account_id_fkey"
+pg_restore: from TOC entry 4327; 2606 17199 FK CONSTRAINT instagram_conversations instagram_conversations_instagram_account_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_conversations_instagram_account_id_fkey" for relation "instagram_conversations" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_conversations
+    ADD CONSTRAINT instagram_conversations_instagram_account_id_fkey FOREIGN KEY (instagram_account_id) REFERENCES coexistence.instagram_accounts(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_messages instagram_messages_conversation_id_fkey"
+pg_restore: from TOC entry 4328; 2606 17030 FK CONSTRAINT instagram_messages instagram_messages_conversation_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_messages_conversation_id_fkey" for relation "instagram_messages" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_messages
+    ADD CONSTRAINT instagram_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES coexistence.instagram_conversations(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_notes instagram_notes_contact_id_fkey"
+pg_restore: from TOC entry 4337; 2606 17150 FK CONSTRAINT instagram_notes instagram_notes_contact_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_notes_contact_id_fkey" for relation "instagram_notes" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_notes
+    ADD CONSTRAINT instagram_notes_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES coexistence.instagram_contacts(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_tags instagram_tags_contact_id_fkey"
+pg_restore: from TOC entry 4336; 2606 17135 FK CONSTRAINT instagram_tags instagram_tags_contact_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_tags_contact_id_fkey" for relation "instagram_tags" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_tags
+    ADD CONSTRAINT instagram_tags_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES coexistence.instagram_contacts(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_templates instagram_templates_instagram_account_id_fkey"
+pg_restore: from TOC entry 4329; 2606 17214 FK CONSTRAINT instagram_templates instagram_templates_instagram_account_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_templates_instagram_account_id_fkey" for relation "instagram_templates" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_templates
+    ADD CONSTRAINT instagram_templates_instagram_account_id_fkey FOREIGN KEY (instagram_account_id) REFERENCES coexistence.instagram_accounts(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_workflow_execution_steps instagram_workflow_execution_steps_execution_id_fkey"
+pg_restore: from TOC entry 4335; 2606 17121 FK CONSTRAINT instagram_workflow_execution_steps instagram_workflow_execution_steps_execution_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_workflow_execution_steps_execution_id_fkey" for relation "instagram_workflow_execution_steps" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_workflow_execution_steps
+    ADD CONSTRAINT instagram_workflow_execution_steps_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES coexistence.instagram_workflow_executions(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_workflow_executions instagram_workflow_executions_workflow_id_fkey"
+pg_restore: from TOC entry 4334; 2606 17104 FK CONSTRAINT instagram_workflow_executions instagram_workflow_executions_workflow_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_workflow_executions_workflow_id_fkey" for relation "instagram_workflow_executions" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_workflow_executions
+    ADD CONSTRAINT instagram_workflow_executions_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES coexistence.instagram_workflows(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.instagram_workflows instagram_workflows_instagram_account_id_fkey"
+pg_restore: from TOC entry 4333; 2606 17209 FK CONSTRAINT instagram_workflows instagram_workflows_instagram_account_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "instagram_workflows_instagram_account_id_fkey" for relation "instagram_workflows" already exists
+Command was: ALTER TABLE ONLY coexistence.instagram_workflows
+    ADD CONSTRAINT instagram_workflows_instagram_account_id_fkey FOREIGN KEY (instagram_account_id) REFERENCES coexistence.instagram_accounts(id);
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.knowledge_chunks knowledge_chunks_document_id_fkey"
+pg_restore: from TOC entry 4342; 2606 82447 FK CONSTRAINT knowledge_chunks knowledge_chunks_document_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "knowledge_chunks_document_id_fkey" for relation "knowledge_chunks" already exists
+Command was: ALTER TABLE ONLY coexistence.knowledge_chunks
+    ADD CONSTRAINT knowledge_chunks_document_id_fkey FOREIGN KEY (document_id) REFERENCES coexistence.knowledge_documents(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.media_library media_library_whatsapp_account_id_fkey"
+pg_restore: from TOC entry 4313; 2606 16896 FK CONSTRAINT media_library media_library_whatsapp_account_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "media_library_whatsapp_account_id_fkey" for relation "media_library" already exists
+Command was: ALTER TABLE ONLY coexistence.media_library
+    ADD CONSTRAINT media_library_whatsapp_account_id_fkey FOREIGN KEY (whatsapp_account_id) REFERENCES coexistence.whatsapp_accounts(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.media_meta_sync media_meta_sync_account_id_fkey"
+pg_restore: from TOC entry 4314; 2606 16901 FK CONSTRAINT media_meta_sync media_meta_sync_account_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "media_meta_sync_account_id_fkey" for relation "media_meta_sync" already exists
+Command was: ALTER TABLE ONLY coexistence.media_meta_sync
+    ADD CONSTRAINT media_meta_sync_account_id_fkey FOREIGN KEY (account_id) REFERENCES coexistence.whatsapp_accounts(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.media_meta_sync media_meta_sync_media_id_fkey"
+pg_restore: from TOC entry 4315; 2606 16906 FK CONSTRAINT media_meta_sync media_meta_sync_media_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "media_meta_sync_media_id_fkey" for relation "media_meta_sync" already exists
+Command was: ALTER TABLE ONLY coexistence.media_meta_sync
+    ADD CONSTRAINT media_meta_sync_media_id_fkey FOREIGN KEY (media_id) REFERENCES coexistence.media_library(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.message_template_analytics_daily message_template_analytics_daily_template_id_fkey"
+pg_restore: from TOC entry 4316; 2606 16911 FK CONSTRAINT message_template_analytics_daily message_template_analytics_daily_template_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "message_template_analytics_daily_template_id_fkey" for relation "message_template_analytics_daily" already exists
+Command was: ALTER TABLE ONLY coexistence.message_template_analytics_daily
+    ADD CONSTRAINT message_template_analytics_daily_template_id_fkey FOREIGN KEY (template_id) REFERENCES coexistence.message_templates(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.message_template_revisions message_template_revisions_template_id_fkey"
+pg_restore: from TOC entry 4317; 2606 16916 FK CONSTRAINT message_template_revisions message_template_revisions_template_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "message_template_revisions_template_id_fkey" for relation "message_template_revisions" already exists
+Command was: ALTER TABLE ONLY coexistence.message_template_revisions
+    ADD CONSTRAINT message_template_revisions_template_id_fkey FOREIGN KEY (template_id) REFERENCES coexistence.message_templates(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.message_templates message_templates_whatsapp_account_id_fkey"
+pg_restore: from TOC entry 4318; 2606 16921 FK CONSTRAINT message_templates message_templates_whatsapp_account_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "message_templates_whatsapp_account_id_fkey" for relation "message_templates" already exists
+Command was: ALTER TABLE ONLY coexistence.message_templates
+    ADD CONSTRAINT message_templates_whatsapp_account_id_fkey FOREIGN KEY (whatsapp_account_id) REFERENCES coexistence.whatsapp_accounts(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.pipeline_stages pipeline_stages_pipeline_id_fkey"
+pg_restore: from TOC entry 4319; 2606 16926 FK CONSTRAINT pipeline_stages pipeline_stages_pipeline_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "pipeline_stages_pipeline_id_fkey" for relation "pipeline_stages" already exists
+Command was: ALTER TABLE ONLY coexistence.pipeline_stages
+    ADD CONSTRAINT pipeline_stages_pipeline_id_fkey FOREIGN KEY (pipeline_id) REFERENCES coexistence.pipelines(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.pipelines pipelines_created_by_fkey"
+pg_restore: from TOC entry 4320; 2606 16931 FK CONSTRAINT pipelines pipelines_created_by_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "pipelines_created_by_fkey" for relation "pipelines" already exists
+Command was: ALTER TABLE ONLY coexistence.pipelines
+    ADD CONSTRAINT pipelines_created_by_fkey FOREIGN KEY (created_by) REFERENCES coexistence.akchat_users(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.tags tags_category_id_fkey"
+pg_restore: from TOC entry 4321; 2606 16936 FK CONSTRAINT tags tags_category_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "tags_category_id_fkey" for relation "tags" already exists
+Command was: ALTER TABLE ONLY coexistence.tags
+    ADD CONSTRAINT tags_category_id_fkey FOREIGN KEY (category_id) REFERENCES coexistence.categories(id) ON DELETE CASCADE;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.user_audit_log user_audit_log_actor_user_id_fkey"
+pg_restore: from TOC entry 4322; 2606 16941 FK CONSTRAINT user_audit_log user_audit_log_actor_user_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "user_audit_log_actor_user_id_fkey" for relation "user_audit_log" already exists
+Command was: ALTER TABLE ONLY coexistence.user_audit_log
+    ADD CONSTRAINT user_audit_log_actor_user_id_fkey FOREIGN KEY (actor_user_id) REFERENCES coexistence.akchat_users(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.user_wa_assignments user_wa_assignments_created_by_fkey"
+pg_restore: from TOC entry 4323; 2606 16946 FK CONSTRAINT user_wa_assignments user_wa_assignments_created_by_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "user_wa_assignments_created_by_fkey" for relation "user_wa_assignments" already exists
+Command was: ALTER TABLE ONLY coexistence.user_wa_assignments
+    ADD CONSTRAINT user_wa_assignments_created_by_fkey FOREIGN KEY (created_by) REFERENCES coexistence.akchat_users(id) ON DELETE SET NULL;
+
+
+pg_restore: creating FK CONSTRAINT "coexistence.user_wa_assignments user_wa_assignments_user_id_fkey"
+pg_restore: from TOC entry 4324; 2606 16951 FK CONSTRAINT user_wa_assignments user_wa_assignments_user_id_fkey postgres
+pg_restore: error: could not execute query: ERROR:  constraint "user_wa_assignments_user_id_fkey" for relation "user_wa_assignments" already exists
+Command was: ALTER TABLE ONLY coexistence.user_wa_assignments
+    ADD CONSTRAINT user_wa_assignments_user_id_fkey FOREIGN KEY (user_id) REFERENCES coexistence.akchat_users(id) ON DELETE CASCADE;
+
+
+pg_restore: warning: errors ignored on restore: 334

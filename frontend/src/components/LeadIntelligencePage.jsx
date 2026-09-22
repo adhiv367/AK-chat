@@ -20,10 +20,15 @@ export default function LeadIntelligencePage() {
   const [filter, setFilter] = useState('All');
 
   useEffect(() => {
-    fetch('/api/lead-intelligence')
-      .then(r => r.json())
-      .then(data => { setLeads(Array.isArray(data) ? data : []); setLoading(false); })
-      .catch(() => setLoading(false));
+    const fetchLeads = () => {
+      fetch('/api/lead-intelligence')
+        .then(r => r.json())
+        .then(data => { setLeads(Array.isArray(data) ? data : []); setLoading(false); })
+        .catch(() => setLoading(false));
+    };
+    fetchLeads();
+    const intervalId = setInterval(fetchLeads, 15000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const filtered = filter === 'All' ? leads : leads.filter(l => l.current_intent === filter);

@@ -33,7 +33,7 @@ function requireInternalSecret(req, res, next) {
   next();
 }
 
-router.use(requireInternalSecret);
+router.use('/internal', requireInternalSecret);
 
 // POST /internal/prepare-followup
 router.post('/internal/prepare-followup', async (req, res) => {
