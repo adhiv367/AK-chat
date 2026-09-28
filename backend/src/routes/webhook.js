@@ -656,6 +656,7 @@ if (product) {
                   // ── Build payload for ai_bridge ────────────────────────
                   const aiPayload = {};
                   aiPayload.customer_id = record.contact_number || '';
+                  aiPayload.wa_number   = record.wa_number || '';
                   if (msgType === 'image') {
                     aiPayload.message = record.message_body || '';
                     aiPayload.image   = record.media_url   || null;
@@ -670,7 +671,10 @@ if (product) {
                   if (AI_BRIDGE_ENABLED && (aiPayload.message || aiPayload.image)) {
                     const aiResponse = await fetch('https://akchat-whatsapp-bot-s2s2.onrender.com/ai', {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                         headers: {
+                           'Content-Type': 'application/json',
+                           ...(process.env.AI_SERVICE_SHARED_SECRET ? { 'X-AI-Service-Secret': process.env.AI_SERVICE_SHARED_SECRET } : {}),
+   },
                       body: JSON.stringify(aiPayload)
                     });
                     const aiData    = await aiResponse.json();
@@ -678,6 +682,8 @@ if (product) {
                     const aiImage   = aiData.image   || null;
                     const aiType    = aiData.type    || 'text';
                     const aiButtons = Array.isArray(aiData.buttons) ? aiData.buttons : [];
+                    const aiIntro   = aiData.intro || '';
+                    const aiCards   = Array.isArray(aiData.cards) ? aiData.cards.filter(c => c && c.text) : [];
 
                     if (aiReply) {
                       const { account, error } = await resolveAccount({ fromPhoneNumber: record.phone_number_id });
@@ -712,6 +718,44 @@ if (product) {
                           const localId = await insertPendingRow({ account, toNumber: toNum, messageType: 'interactive', messageBody: aiReply });
                           await enqueueSend({ kind: 'interactive', localMessageId: localId, accountId: account.id, to: toNum, payload: interactivePayload });
                           console.log('[AI] Sent interactive to', toNum, 'with', waButtons.length, 'buttons');
+                        } else if (aiCards.length > 0) {
+                          // ─ Several product cards: short intro text, then ONE image message per
+                          //   product with that product's detail card as the caption (so photo and
+                          //   details always stay together, in order) ─
+                          if (aiIntro) {
+                            const introId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiIntro });
+                            await enqueueSend({ kind: 'text', localMessageId: introId, accountId: account.id, to: toNum, payload: { body: aiIntro } });
+                          }
+                          for (const card of aiCards.slice(0, 3)) {
+                            const caption = String(card.text || '').slice(0, 1024); // WhatsApp caption limit
+                            let cardImageSent = false;
+                            if (card.image) {
+                              try {
+                                const prep = await prepareProductImage(card.image);
+                                const uploaded = await uploadMedia({
+                                  accessToken: account.accessToken,
+                                  phoneNumberId: account.phoneNumberId,
+                                  buffer: prep.buffer,
+                                  mimeType: prep.mime,
+                                  filename: 'product.' + (prep.mime === 'image/png' ? 'png' : 'jpg'),
+                                });
+                                if (!uploaded || !uploaded.id) {
+                                  throw new Error('Meta /media upload returned no media id');
+                                }
+                                const cardImgId = await insertPendingRow({ account, toNumber: toNum, messageType: 'image', messageBody: caption, mediaUrl: card.image });
+                                await enqueueSend({ kind: 'media', localMessageId: cardImgId, accountId: account.id, to: toNum, payload: { type: 'image', mediaId: uploaded.id, caption } });
+                                cardImageSent = true;
+                              } catch (cardImgErr) {
+                                console.error('[AI] Card image failed for', toNum, card.sku, ':', cardImgErr.message);
+                              }
+                            }
+                            if (!cardImageSent) {
+                              // image missing/failed: still deliver the details as plain text
+                              const cardTextId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: card.text });
+                              await enqueueSend({ kind: 'text', localMessageId: cardTextId, accountId: account.id, to: toNum, payload: { body: card.text } });
+                            }
+                          }
+                          console.log('[AI] Sent', Math.min(aiCards.length, 3), 'product cards to', toNum);
                         } else if (aiType === 'product' && aiImage) {
                           // ─ Product: image first, then text ─
                           // Meta rejects any image (link OR uploaded media) over 5MB
