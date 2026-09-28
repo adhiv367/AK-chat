@@ -80,6 +80,8 @@ const { ensureCatalogConnectionsTables } = require('./db/catalogConnectionsSchem
 const { ensureMetaCatalogTables } = require('./db/metaCatalogSchema'); // Phase 7.5 — Meta Commerce Catalog Integration
 const { router: retargetRouter } = require('./routes/retarget');
 const { router: leadIntelligenceRouter } = require('./routes/leadIntelligence');
+const { router: handoffAlertsRouter } = require('./routes/handoffAlerts'); // human-handoff bell + staff recipients
+const { startHandoffSweeper } = require('./services/handoffAlerts');
 const { router: instagramInboxRouter } = require('./routes/instagram/instagramInbox');
 const { router: instagramContactsRouter } = require('./routes/instagram/instagramContacts');
 const { router: instagramTemplatesRouter } = require('./routes/instagram/instagramTemplates');
@@ -218,6 +220,7 @@ app.use('/api', authMiddleware, broadcastsRouter);
 app.use('/api', authMiddleware, targetMessageRouter);
 app.use('/api', authMiddleware, campaignsRouter); // Phase 6
 app.use('/api', authMiddleware, sequencesRouter); // Phase 7 Part B
+app.use('/api', authMiddleware, handoffAlertsRouter); // human-handoff alerts
 app.use('/api', authMiddleware, flowsRouter); // Phase 6.2 — Flow CRUD + JSON builder/validation
 app.use('/api', authMiddleware, googleSheetSettingsRouter);
 app.use('/api', authMiddleware, chatbotsRouter);
@@ -397,6 +400,7 @@ startMediaWorker();
 console.log("STEP 4");
 
 startSendWorker();
+startHandoffSweeper();
 console.log("STEP 5");
 
 startBroadcastScheduler();

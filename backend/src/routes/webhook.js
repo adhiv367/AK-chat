@@ -19,6 +19,7 @@ const { resolveAccount, insertPendingRow } = require('../services/messageSender'
 const { enqueueSend } = require('../queue/sendQueue');
 const { prepareProductImage } = require('../services/imagePrep');
 const { uploadMedia } = require('../integrations/metaSend');
+const { raiseHandoff } = require('../services/handoffAlerts');
 const { syncConversationToZoho } = require('../services/zohoSyncService');
 const { recordFlowSubmission } = require('../services/flowSubmissionService');
 const orderService = require('../services/orderService'); // Phase 7.7 — Cart
@@ -684,6 +685,17 @@ if (product) {
                     const aiButtons = Array.isArray(aiData.buttons) ? aiData.buttons : [];
                     const aiIntro   = aiData.intro || '';
                     const aiCards   = Array.isArray(aiData.cards) ? aiData.cards.filter(c => c && c.text) : [];
+
+                    // Human-handoff staff alert: the AI bridge only DETECTS it; Node owns the alert.
+                    // Fire-and-forget - raiseHandoff never throws, so the customer's reply is unaffected.
+                    if (aiData.handoff_required === true) {
+                      raiseHandoff({
+                        phoneNumberId: record.phone_number_id,
+                        contactNumber: record.contact_number,
+                        reason: aiData.handoff_reason,
+                        message: aiPayload.message,
+                      }).catch(() => {});
+                    }
 
                     if (aiReply) {
                       const { account, error } = await resolveAccount({ fromPhoneNumber: record.phone_number_id });
