@@ -669,7 +669,15 @@ if (product) {
                     aiPayload.message = record.message_body || '';
                   }
 
-                  if (AI_BRIDGE_ENABLED && (aiPayload.message || aiPayload.image)) {
+                  if (AI_BRIDGE_ENABLED && (aiPayload.message || aiPayload.image) && !(() => {
+                    // DEDUPE_AI: Meta re-delivers a webhook when our 200 is slow; answer each message ID once.
+                    const seen = (globalThis.__aiSeenMsgs = globalThis.__aiSeenMsgs || new Map());
+                    const id = record.message_id; const now = Date.now();
+                    for (const [k, t] of seen) { if (now - t > 600000) seen.delete(k); }
+                    if (!id) return false;
+                    if (seen.has(id)) { console.log('[AI] Skipped duplicate delivery of ' + id); return true; }
+                    seen.set(id, now); return false;
+                  })()) {
                     const aiResponse = await fetch('https://akchat-whatsapp-bot-s2s2.onrender.com/ai', {
                       method: 'POST',
                          headers: {
@@ -738,7 +746,7 @@ if (product) {
                             const introId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiIntro });
                             await enqueueSend({ kind: 'text', localMessageId: introId, accountId: account.id, to: toNum, payload: { body: aiIntro } });
                           }
-                          for (const card of aiCards.slice(0, 3)) {
+                          for (const card of aiCards.slice(0, 5)) {
                             const caption = String(card.text || '').slice(0, 1024); // WhatsApp caption limit
                             let cardImageSent = false;
                             if (card.image) {
@@ -767,7 +775,7 @@ if (product) {
                               await enqueueSend({ kind: 'text', localMessageId: cardTextId, accountId: account.id, to: toNum, payload: { body: card.text } });
                             }
                           }
-                          console.log('[AI] Sent', Math.min(aiCards.length, 3), 'product cards to', toNum);
+                          console.log('[AI] Sent', Math.min(aiCards.length, 5), 'product cards to', toNum);
                         } else if (aiType === 'product' && aiImage) {
                           // ─ Product: image first, then text ─
                           // Meta rejects any image (link OR uploaded media) over 5MB
