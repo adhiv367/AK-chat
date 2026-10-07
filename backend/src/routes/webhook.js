@@ -678,6 +678,14 @@ if (product) {
                     if (seen.has(id)) { console.log('[AI] Skipped duplicate delivery of ' + id); return true; }
                     seen.set(id, now); return false;
                   })()) {
+                    // LATEST_WINS: a message that passed the duplicate guard becomes this customer's newest message.
+                    // Older, still-running card loops check isStaleReply() and stop. Duplicates never reach here.
+                    const __lwMap = (globalThis.__aiLatestMsg = globalThis.__aiLatestMsg || new Map());
+                    const __lwKey = String(record.phone_number_id || '') + ':' + String(record.contact_number || '');
+                    const __lwNo = (globalThis.__aiLatestCounter = (globalThis.__aiLatestCounter || 0) + 1);
+                    __lwMap.set(__lwKey, __lwNo);
+                    const isStaleReply = () => __lwMap.get(__lwKey) !== __lwNo;
+
                     const aiResponse = await fetch('https://akchat-whatsapp-bot-s2s2.onrender.com/ai', {
                       method: 'POST',
                          headers: {
@@ -742,11 +750,13 @@ if (product) {
                           // ─ Several product cards: short intro text, then ONE image message per
                           //   product with that product's detail card as the caption (so photo and
                           //   details always stay together, in order) ─
-                          if (aiIntro) {
+                          if (aiIntro && !isStaleReply()) {
                             const introId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiIntro });
                             await enqueueSend({ kind: 'text', localMessageId: introId, accountId: account.id, to: toNum, payload: { body: aiIntro } });
                           }
+                          let cardsQueued = 0;
                           for (const card of aiCards.slice(0, 5)) {
+                            if (isStaleReply()) { console.log('[AI] Stopped card loop (newer message) for', toNum); break; }
                             const caption = String(card.text || '').slice(0, 1024); // WhatsApp caption limit
                             let cardImageSent = false;
                             if (card.image) {
@@ -762,9 +772,11 @@ if (product) {
                                 if (!uploaded || !uploaded.id) {
                                   throw new Error('Meta /media upload returned no media id');
                                 }
+                                if (isStaleReply()) { console.log('[AI] Stopped card loop (newer message) for', toNum); break; }
                                 const cardImgId = await insertPendingRow({ account, toNumber: toNum, messageType: 'image', messageBody: caption, mediaUrl: card.image });
                                 await enqueueSend({ kind: 'media', localMessageId: cardImgId, accountId: account.id, to: toNum, payload: { type: 'image', mediaId: uploaded.id, caption } });
                                 cardImageSent = true;
+                                cardsQueued++;
                               } catch (cardImgErr) {
                                 console.error('[AI] Card image failed for', toNum, card.sku, ':', cardImgErr.message);
                               }
@@ -773,9 +785,10 @@ if (product) {
                               // image missing/failed: still deliver the details as plain text
                               const cardTextId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: card.text });
                               await enqueueSend({ kind: 'text', localMessageId: cardTextId, accountId: account.id, to: toNum, payload: { body: card.text } });
+                              cardsQueued++;
                             }
                           }
-                          console.log('[AI] Sent', Math.min(aiCards.length, 5), 'product cards to', toNum);
+                          console.log('[AI] Sent', cardsQueued, 'product cards to', toNum);
                         } else if (aiType === 'product' && aiImage) {
                           // ─ Product: image first, then text ─
                           // Meta rejects any image (link OR uploaded media) over 5MB
