@@ -661,6 +661,23 @@ if (product) {
                   if (msgType === 'image') {
                     aiPayload.message = record.message_body || '';
                     aiPayload.image   = record.media_url   || null;
+                    // IMAGE_MATCH: attach the picture bytes so the AI bridge can match it to a product.
+                    // Never throws; on any failure the payload is sent exactly as before.
+                    try {
+                      if (record.media_url && record.phone_number_id) {
+                        const _acc = await require('./whatsappAccounts').getAccountByPhoneNumber(record.phone_number_id);
+                        if (_acc && _acc.accessToken) {
+                          const _mm = require('../integrations/metaMedia');
+                          const _info = await _mm.getMediaInfo(record.media_url, _acc.accessToken);
+                          const _bin = await _mm.downloadMediaBinary(_info.url, _acc.accessToken);
+                          if (_bin && _bin.buffer && _bin.buffer.length <= 8 * 1024 * 1024) {
+                            aiPayload.image_base64 = _bin.buffer.toString('base64');
+                          }
+                        }
+                      }
+                    } catch (_imgErr) {
+                      console.log('[AI] image download for matching failed, continuing without it:', _imgErr.message);
+                    }
                   } else if (msgType === 'interactive') {
                     // message_body is 'ID::<id>::<title>' (see parseMessage above)
                     aiPayload.message      = record.message_body || '';
