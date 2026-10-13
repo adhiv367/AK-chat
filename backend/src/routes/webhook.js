@@ -843,13 +843,49 @@ if (product) {
                             // Log loudly — never silently skip the product image.
                             console.error('[AI] Product image preparation/send FAILED for', toNum, ':', imgErr.message);
                           }
-                          const localId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiReply });
-                          await enqueueSend({ kind: 'text', localMessageId: localId, accountId: account.id, to: toNum, payload: { body: aiReply } });
+                          // CTA_URL: product link as a tappable 'View & Order Now' button instead of a raw link in the text
+                          const aiCtaUrl = (typeof aiData.cta_url === 'string' && /^https:\/\//.test(aiData.cta_url)) ? aiData.cta_url : '';
+                          if (aiCtaUrl) {
+                            const ctaPayload = {
+                              messaging_product: 'whatsapp',
+                              recipient_type:    'individual',
+                              to:                toNum,
+                              type:              'interactive',
+                              interactive: {
+                                type: 'cta_url',
+                                body: { text: String(aiReply).slice(0, 1024) },
+                                action: { name: 'cta_url', parameters: { display_text: 'View & Order Now', url: aiCtaUrl } },
+                              },
+                            };
+                            const ctaId = await insertPendingRow({ account, toNumber: toNum, messageType: 'interactive', messageBody: aiReply });
+                            await enqueueSend({ kind: 'interactive', localMessageId: ctaId, accountId: account.id, to: toNum, payload: ctaPayload });
+                          } else {
+                            const localId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiReply });
+                            await enqueueSend({ kind: 'text', localMessageId: localId, accountId: account.id, to: toNum, payload: { body: aiReply } });
+                          }
                           console.log('[AI] Sent product to', toNum, imageSendFailed ? '(image failed, text sent)' : '');
                         } else {
                           // ─ Plain text ─
-                          const localId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiReply });
-                          await enqueueSend({ kind: 'text', localMessageId: localId, accountId: account.id, to: toNum, payload: { body: aiReply } });
+                          // CTA_URL: product link as a tappable 'View & Order Now' button instead of a raw link in the text
+                          const aiCtaUrl = (typeof aiData.cta_url === 'string' && /^https:\/\//.test(aiData.cta_url)) ? aiData.cta_url : '';
+                          if (aiCtaUrl) {
+                            const ctaPayload = {
+                              messaging_product: 'whatsapp',
+                              recipient_type:    'individual',
+                              to:                toNum,
+                              type:              'interactive',
+                              interactive: {
+                                type: 'cta_url',
+                                body: { text: String(aiReply).slice(0, 1024) },
+                                action: { name: 'cta_url', parameters: { display_text: 'View & Order Now', url: aiCtaUrl } },
+                              },
+                            };
+                            const ctaId = await insertPendingRow({ account, toNumber: toNum, messageType: 'interactive', messageBody: aiReply });
+                            await enqueueSend({ kind: 'interactive', localMessageId: ctaId, accountId: account.id, to: toNum, payload: ctaPayload });
+                          } else {
+                            const localId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: aiReply });
+                            await enqueueSend({ kind: 'text', localMessageId: localId, accountId: account.id, to: toNum, payload: { body: aiReply } });
+                          }
                           console.log('[AI] Replied to', toNum, ':', aiReply);
                         }
                       }
