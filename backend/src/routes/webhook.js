@@ -790,8 +790,27 @@ if (product) {
                                   throw new Error('Meta /media upload returned no media id');
                                 }
                                 if (isStaleReply()) { console.log('[AI] Stopped card loop (newer message) for', toNum); break; }
-                                const cardImgId = await insertPendingRow({ account, toNumber: toNum, messageType: 'image', messageBody: caption, mediaUrl: card.image });
-                                await enqueueSend({ kind: 'media', localMessageId: cardImgId, accountId: account.id, to: toNum, payload: { type: 'image', mediaId: uploaded.id, caption } });
+                                // CTA_URL: one message per dress - photo header + details + 'View & Order Now' button
+                                const cardCta = (typeof card.cta_url === 'string' && /^https:\/\//.test(card.cta_url)) ? card.cta_url : '';
+                                if (cardCta) {
+                                  const cardCtaPayload = {
+                                    messaging_product: 'whatsapp',
+                                    recipient_type:    'individual',
+                                    to:                toNum,
+                                    type:              'interactive',
+                                    interactive: {
+                                      type: 'cta_url',
+                                      header: { type: 'image', image: { id: uploaded.id } },
+                                      body: { text: caption },
+                                      action: { name: 'cta_url', parameters: { display_text: 'View & Order Now', url: cardCta } },
+                                    },
+                                  };
+                                  const cardCtaId = await insertPendingRow({ account, toNumber: toNum, messageType: 'interactive', messageBody: caption });
+                                  await enqueueSend({ kind: 'interactive', localMessageId: cardCtaId, accountId: account.id, to: toNum, payload: cardCtaPayload });
+                                } else {
+                                  const cardImgId = await insertPendingRow({ account, toNumber: toNum, messageType: 'image', messageBody: caption, mediaUrl: card.image });
+                                  await enqueueSend({ kind: 'media', localMessageId: cardImgId, accountId: account.id, to: toNum, payload: { type: 'image', mediaId: uploaded.id, caption } });
+                                }
                                 cardImageSent = true;
                                 cardsQueued++;
                               } catch (cardImgErr) {
@@ -800,8 +819,25 @@ if (product) {
                             }
                             if (!cardImageSent) {
                               // image missing/failed: still deliver the details as plain text
-                              const cardTextId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: card.text });
-                              await enqueueSend({ kind: 'text', localMessageId: cardTextId, accountId: account.id, to: toNum, payload: { body: card.text } });
+                              const cardCtaTxt = (typeof card.cta_url === 'string' && /^https:\/\//.test(card.cta_url)) ? card.cta_url : '';
+                              if (cardCtaTxt) {
+                                const cardCtaTxtPayload = {
+                                  messaging_product: 'whatsapp',
+                                  recipient_type:    'individual',
+                                  to:                toNum,
+                                  type:              'interactive',
+                                  interactive: {
+                                    type: 'cta_url',
+                                    body: { text: String(card.text || '').slice(0, 1024) },
+                                    action: { name: 'cta_url', parameters: { display_text: 'View & Order Now', url: cardCtaTxt } },
+                                  },
+                                };
+                                const cardCtaTxtId = await insertPendingRow({ account, toNumber: toNum, messageType: 'interactive', messageBody: card.text });
+                                await enqueueSend({ kind: 'interactive', localMessageId: cardCtaTxtId, accountId: account.id, to: toNum, payload: cardCtaTxtPayload });
+                              } else {
+                                const cardTextId = await insertPendingRow({ account, toNumber: toNum, messageType: 'text', messageBody: card.text });
+                                await enqueueSend({ kind: 'text', localMessageId: cardTextId, accountId: account.id, to: toNum, payload: { body: card.text } });
+                              }
                               cardsQueued++;
                             }
                           }
